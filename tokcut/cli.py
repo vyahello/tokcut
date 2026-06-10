@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from typing import cast
 
 import numpy as np
@@ -98,24 +99,43 @@ def plan(
     return src, segs, est, frames, hook_win
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    out = args.output or os.path.splitext(args.input)[0] + "_tokcut.mp4"
+def edit(
+    input_path: str,
+    caption: str,
+    *,
+    output: str | None = None,
+    target: float | None = None,
+    caption_pos: str = "auto",
+    hook: bool = True,
+    crop_enabled: bool = True,
+    keep_audio: bool = False,
+    music: str | None = None,
+    music_style: str = "synthwave",
+    music_bpm: int = 84,
+    crf: int = 18,
+    preset: str = "medium",
+    dry_run: bool = False,
+    on_progress: Callable[[str], None] | None = None,
+) -> str:
+    """Full edit pipeline: analyze → decide → render. Returns output path.
 
-    for warning in check_caption(args.caption):
-        print(f"⚠ caption check: {warning}", file=sys.stderr)
+    The reusable core behind both the CLI and the Telegram bot.
+    `on_progress` receives short human-readable status lines.
+    """
+    notify = on_progress or (lambda _line: None)
+    out = output or os.path.splitext(input_path)[0] + "_tokcut.mp4"
 
-    src, segs, est, frames, hook_win = plan(
-        args.input, args.target, args.hook)
-    print(f"source: {src['w']}x{src['h']}  {src['duration']:.1f}s "
-          f"@ {src['fps']:.0f}fps  "
-          f"({src.get('transfer') or 'unknown'} transfer)")
+    src, segs, est, frames, hook_win = plan(input_path, target, hook)
+    notify(f"source: {src['w']}x{src['h']}  {src['duration']:.1f}s "
+           f"@ {src['fps']:.0f}fps  "
+           f"({src.get('transfer') or 'unknown'} transfer)")
 
-    crop = content_crop(frames, src) if args.crop else None
+    crop = content_crop(frames, src) if crop_enabled else None
     if crop:
-        print(f"crop: zoom into {crop[2]}x{crop[3]} at ({crop[0]},{crop[1]})")
+        notify(f"crop: zoom into {crop[2]}x{crop[3]} "
+               f"at ({crop[0]},{crop[1]})")
 
-    print(f"edit plan ({len(segs)} segments, ~{est:.1f}s output):")
+    lines = [f"edit plan ({len(segs)} segments, ~{est:.1f}s output):"]
     for i, (s, e, sp) in enumerate(segs):
         if hook_win and i == 0:
             tag = "HOOK   1.0x (cold open)"
@@ -123,14 +143,15 @@ def main(argv: list[str] | None = None) -> int:
             tag = "ACTION 1.0x"
         else:
             tag = f"FAST  {sp:.2f}x"
-        print(f"  {s:7.2f} - {e:7.2f}  {tag}")
-    if args.dry_run:
-        return 0
+        lines.append(f"  {s:7.2f} - {e:7.2f}  {tag}")
+    notify("\n".join(lines))
+    if dry_run:
+        return out
 
     tmp = tempfile.mkdtemp(prefix="tokcut_")
     try:
         cap_png = os.path.join(tmp, "caption.png")
-        cap_size = make_caption(args.caption, cap_png)
+        cap_size = make_caption(caption, cap_png)
 
         # layout works on post-crop dimensions; the caption-placement
         # saliency map must describe the same (cropped) picture
@@ -144,32 +165,57 @@ def main(argv: list[str] | None = None) -> int:
             ay1 = max(ay0 + 2, (crop[1] + crop[3]) * ah // src["h"])
             lay_frames = frames[:, ay0:ay1, ax0:ax1]
             lay_src = cast(SourceInfo, dict(src, w=crop[2], h=crop[3]))
-        sal = (saliency_map(lay_frames)
-               if args.caption_pos == "auto" else None)
-        lay = compute_layout(lay_src, cap_size, args.caption_pos, sal)
-        print(f"caption at y={lay['cap_y']} ({args.caption_pos})")
+        sal = saliency_map(lay_frames) if caption_pos == "auto" else None
+        lay = compute_layout(lay_src, cap_size, caption_pos, sal)
+        notify(f"caption at y={lay['cap_y']} ({caption_pos})")
 
         music_path: str | None = None
-        if args.music == "__auto__":
+        if music == "__auto__":
             music_path = os.path.join(tmp, "music.wav")
-            write_wav(generate(max(est, 1.0) + 2, bpm=args.music_bpm,
-                               style=args.music_style), music_path)
-            print(f"music: synthesized {args.music_style} @ "
-                  f"{args.music_bpm}bpm")
-        elif args.music:
-            music_path = args.music
-            print(f"music: {music_path}")
+            write_wav(generate(max(est, 1.0) + 2, bpm=music_bpm,
+                               style=music_style), music_path)
+            notify(f"music: synthesized {music_style} @ {music_bpm}bpm")
+        elif music:
+            music_path = music
+            notify(f"music: {music_path}")
 
         if not music_path:
-            print("audio: original ambient (--keep-audio)" if args.keep_audio
-                  else "audio: muted (add a TikTok sound in-app)")
+            notify("audio: original ambient" if keep_audio
+                   else "audio: muted (add a TikTok sound in-app)")
 
-        render(args.input, segs, cap_png, src, lay, out,
-               args.crf, args.preset, music_path, args.keep_audio,
-               crop=crop)
+        notify("rendering…")
+        render(input_path, segs, cap_png, src, lay, out,
+               crf, preset, music_path, keep_audio, crop=crop)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print(f"done: {out}")
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    for warning in check_caption(args.caption):
+        print(f"⚠ caption check: {warning}", file=sys.stderr)
+
+    out = edit(
+        args.input,
+        args.caption,
+        output=args.output,
+        target=args.target,
+        caption_pos=args.caption_pos,
+        hook=args.hook,
+        crop_enabled=args.crop,
+        keep_audio=args.keep_audio,
+        music=args.music,
+        music_style=args.music_style,
+        music_bpm=args.music_bpm,
+        crf=args.crf,
+        preset=args.preset,
+        dry_run=args.dry_run,
+        on_progress=print,
+    )
+    if not args.dry_run:
+        print(f"done: {out}")
     return 0
 
 

@@ -1,7 +1,7 @@
 import pytest
 
 from tokcut.bot.config import is_allowed, load_config
-from tokcut.bot.pipeline import format_plan
+from tokcut.bot.pipeline import derive_caption, format_plan
 
 
 def test_load_config_ok():
@@ -50,6 +50,20 @@ def test_is_allowed():
     assert is_allowed(42, 42)
     assert not is_allowed(7, 42)
     assert not is_allowed(None, 42)
+
+
+def test_derive_caption_prefers_user_text():
+    assert derive_caption("  my caption ⚡ ", "x.mp4") == "my caption ⚡"
+
+
+def test_derive_caption_falls_back_to_filename():
+    assert derive_caption(None, "my_demo-v2.mp4") == "my demo v2"
+    assert derive_caption("", "btop.mp4") == "btop"
+
+
+def test_derive_caption_last_resort():
+    assert derive_caption(None, None) == "watch this ⚡"
+    assert derive_caption(" ", "___.mp4") == "watch this ⚡"
 
 
 def test_format_plan_renders_segments():

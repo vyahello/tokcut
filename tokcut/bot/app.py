@@ -1,11 +1,13 @@
-"""Telegram bot entry point — step 1 skeleton.
+"""Telegram bot entry point — step 2: full edit round-trip.
 
-Python's job (here): receive the clip, enforce the allow-list, download it,
-run tokcut's deterministic dry-run plan, and reply with it. Claude Code's
-job (later, step 3): write the caption, review the rendered output, and
-drive the approve/redo loop over subscription OAuth — not wired yet.
+Python's job: receive the clip, enforce the allow-list, download it, run
+the tokcut edit pipeline in a worker thread (queued — one render at a
+time), and send the finished vertical clip back as a *document* so
+Telegram doesn't recompress it. Claude Code's job (step 3): caption
+wording, output review, and the approve/redo loop.
 """
 
+import asyncio
 import logging
 import os
 
@@ -17,8 +19,10 @@ from telegram.ext import (
     filters,
 )
 
+from ..caption import check_caption
+from ..cli import edit
 from .config import BotConfig, is_allowed, load_config
-from .pipeline import dry_run_plan, format_plan
+from .pipeline import derive_caption
 
 log = logging.getLogger("tokcut.bot")
 
@@ -34,7 +38,8 @@ async def start(update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     await update.message.reply_text(
         "👋 Send me a clip — as a *file* for best quality — and I'll cut it "
-        "into a vertical TikTok edit.",
+        "into a vertical TikTok edit and send it back.\n\n"
+        "Add a message caption to use it as the on-video caption text.",
         parse_mode="Markdown",
     )
 
@@ -53,7 +58,8 @@ async def on_clip(update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await msg.reply_text("⬇️ Downloading…")
     os.makedirs(cfg.workdir, exist_ok=True)
-    suffix = os.path.splitext(getattr(file_obj, "file_name", "") or "")[1]
+    file_name = getattr(file_obj, "file_name", "") or ""
+    suffix = os.path.splitext(file_name)[1]
     dest = os.path.join(
         cfg.workdir, f"{file_obj.file_unique_id}{suffix or '.mp4'}")
     try:
@@ -63,28 +69,56 @@ async def on_clip(update, context: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("download failed")
         await msg.reply_text(
             f"⚠️ Couldn't download that file: {exc}\n"
-            "Files over 50 MB need a local Bot API server (coming in step 5)."
+            "Files over 50 MB need a local Bot API server (step 5)."
         )
         return
 
-    await msg.reply_text("🔍 Analyzing motion…")
-    try:
-        src, segs, est = dry_run_plan(dest, cfg.default_target)
-    except Exception as exc:  # noqa: BLE001 — report, don't crash the bot
-        log.exception("analysis failed")
-        await msg.reply_text(f"⚠️ Couldn't analyze that file: {exc}")
-        return
+    caption = derive_caption(msg.caption, file_name)
+    for warning in check_caption(caption):
+        await msg.reply_text(f"⚠️ caption check: {warning}")
 
-    await msg.reply_text(format_plan(src, segs, est), parse_mode="Markdown")
-    await msg.reply_text(
-        "✅ Edit plan ready. Rendering and the Claude-written caption come "
-        "in the next steps."
-    )
+    lock: asyncio.Lock = context.application.bot_data["render_lock"]
+    if lock.locked():
+        await msg.reply_text("⏳ Another render is running — you're queued.")
+
+    async with lock:  # renders are sequential: parallel x265 OOMs the box
+        status = await msg.reply_text(f"✂️ Editing with caption: “{caption}”")
+        loop = asyncio.get_running_loop()
+        progress: list[str] = []
+
+        def notify(line: str) -> None:
+            # called from the worker thread — marshal back to the loop
+            progress.append(line)
+            text = "✂️ " + "\n".join(progress[-6:])
+            asyncio.run_coroutine_threadsafe(
+                status.edit_text(text[:4000]), loop)
+
+        out = os.path.join(
+            cfg.workdir, f"{file_obj.file_unique_id}_tokcut.mp4")
+        try:
+            await asyncio.to_thread(
+                edit, dest, caption,
+                output=out, target=cfg.default_target, on_progress=notify)
+        except Exception as exc:  # noqa: BLE001 — report, keep bot alive
+            log.exception("edit failed")
+            await msg.reply_text(f"⚠️ Edit failed: {exc}")
+            return
+
+        size_mb = os.path.getsize(out) / 1048576
+        await msg.reply_text(f"⬆️ Uploading ({size_mb:.1f} MB)…")
+        with open(out, "rb") as fh:
+            await msg.reply_document(
+                document=fh,
+                filename=os.path.basename(out),
+                caption=(f"✅ “{caption}”\n"
+                         "Muted — add a trending TikTok sound in-app."),
+            )
 
 
 def build_application(cfg: BotConfig) -> Application:
     app = Application.builder().token(cfg.telegram_token).build()
     app.bot_data["config"] = cfg
+    app.bot_data["render_lock"] = asyncio.Lock()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         MessageHandler(filters.VIDEO | filters.Document.ALL, on_clip))

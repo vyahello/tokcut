@@ -1,8 +1,11 @@
 """Deterministic helpers the bot runs in-process — no Telegram, no Claude.
 
-Thin wrappers over tokcut's analysis so the bot can show an edit plan
-before any rendering. Rendering will hang off render.render() in step 2.
+Thin wrappers over tokcut's analysis plus small pure helpers for the bot.
+The actual editing goes through cli.edit() (run in a worker thread by
+app.py); in step 3 Claude Code takes over the caption wording.
 """
+
+import os
 
 from ..analysis import (
     assign_speeds,
@@ -13,6 +16,16 @@ from ..analysis import (
     to_segments,
 )
 from ..types import SourceInfo, SpeedSegment
+
+
+def derive_caption(user_caption: str | None, filename: str | None) -> str:
+    """Caption for the clip: the Telegram message caption, else the
+    filename stem tidied up ("my_demo-v2.mp4" → "my demo v2")."""
+    if user_caption and user_caption.strip():
+        return user_caption.strip()
+    stem = os.path.splitext(os.path.basename(filename or ""))[0]
+    tidy = stem.replace("_", " ").replace("-", " ").strip()
+    return tidy or "watch this ⚡"
 
 
 def dry_run_plan(

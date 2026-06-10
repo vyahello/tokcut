@@ -130,7 +130,11 @@ Notes / caveats to keep in mind:
 
 1. ✅ **Bot skeleton** — `python-telegram-bot`, allow-list, receive
    document, reply with the dry-run edit plan. (`tokcut/bot/`, see `BOT.md`.)
-2. Wrap `tokcut` render as a tool function; reply with the finished clip.
+2. ✅ **Full round-trip** — `cli.edit()` is the reusable pipeline core;
+   the bot runs it in a worker thread behind a render lock (sequential —
+   OOM lesson), streams progress into a status message, and sends the
+   finished clip back as a document. Caption = message caption, else
+   filename stem.
 3. Wire Claude Code (subscription OAuth) for the caption + output review.
 4. Approve/redo inline keyboard + multi-turn session continuity.
 5. Local Bot API server for >50 MB files.
