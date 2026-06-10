@@ -7,7 +7,7 @@ name = "tokcut"
 version = "0.1.0"
 description = "Personal auto-editor for vertical TikTok clips (speed-ramp + caption + music)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "vyahello", email = "vyahello@gmail.com" }]
 dependencies = [
@@ -33,7 +33,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 79
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
