@@ -119,8 +119,10 @@ venv/bin/mypy            # type-check (codebase is fully typed)
 
 ## 🗺️ Roadmap
 
-📱 Phone → private Telegram bot → edited file back (approve / redo loop),
-plus 🥁 beat-aligned music cuts. See [`docs/IDEAS.md`](docs/IDEAS.md).
+📱 Phone → private Telegram bot → **Claude directs the edit** → file back
+(approve / redo loop), plus 🥁 beat-aligned music cuts. See
+[`docs/BOT_ARCHITECTURE.md`](docs/BOT_ARCHITECTURE.md) for the design and
+[`docs/IDEAS.md`](docs/IDEAS.md) for the content playbook.
 
 ---
 
