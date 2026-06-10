@@ -162,6 +162,8 @@ async def _render_and_deliver(msg, context: ContextTypes.DEFAULT_TYPE,
                 filename=os.path.basename(out),
                 caption=doc_caption[:1024],
                 reply_markup=VERDICT_KEYBOARD,
+                read_timeout=600,
+                write_timeout=600,
             )
 
 
@@ -306,7 +308,19 @@ async def on_feedback(update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def build_application(cfg: BotConfig) -> Application:
-    app = Application.builder().token(cfg.telegram_token).build()
+    # Uploading a multi-MB rendered clip blows past the default 5s write
+    # timeout, so give media transfers room; downloads need a long read
+    # timeout too. connect/pool stay short to fail fast on real outages.
+    app = (
+        Application.builder()
+        .token(cfg.telegram_token)
+        .connect_timeout(20.0)
+        .read_timeout(120.0)
+        .write_timeout(120.0)
+        .media_write_timeout(600.0)
+        .pool_timeout(20.0)
+        .build()
+    )
     app.bot_data["config"] = cfg
     app.bot_data["render_lock"] = asyncio.Lock()
     app.bot_data["sessions"] = {}
