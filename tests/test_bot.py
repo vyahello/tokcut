@@ -10,6 +10,14 @@ def test_load_config_ok():
     assert cfg.telegram_token == "tok"
     assert cfg.allowed_user_id == 42
     assert cfg.default_target == 50.0
+    assert cfg.claude_judge is True
+
+
+def test_load_config_claude_off():
+    cfg = load_config({"TELEGRAM_BOT_TOKEN": "tok",
+                       "TOKCUT_ALLOWED_USER_ID": "42",
+                       "TOKCUT_CLAUDE": "off"})
+    assert cfg.claude_judge is False
 
 
 def test_load_config_missing_token():

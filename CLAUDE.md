@@ -23,7 +23,8 @@ edited clip ready to post (see `docs/IDEAS.md`).
 | `tokcut/render.py` | ffmpeg filtergraph builder + encode |
 | `tokcut/cli.py` | argparse entry point (`python -m tokcut` / `tokcut`) |
 | `tokcut/types.py` | shared `SourceInfo`/`Layout` TypedDicts + `Segment`/`SpeedSegment` aliases |
-| `tokcut/bot/` | private Telegram bot (`config`, `pipeline`, `app`) — step 1; see docs/BOT.md |
+| `tokcut/judge.py` | Claude Code judgment layer: headless `claude -p` writes captions from sampled frames and reviews rendered output (subscription OAuth) |
+| `tokcut/bot/` | private Telegram bot (`config`, `pipeline`, `app`) — see docs/BOT.md |
 | `tests/` | pytest suite — pure logic, no ffmpeg/network needed (one font-gated test) |
 | `docs/USAGE.md` | how to run it |
 | `docs/IDEAS.md` | content/format brainstorm + Telegram bot + music roadmap |

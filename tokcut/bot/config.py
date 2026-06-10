@@ -16,6 +16,7 @@ class BotConfig:
     allowed_user_id: int
     workdir: str
     default_target: float
+    claude_judge: bool
 
 
 def load_config(env: dict[str, str] | None = None) -> BotConfig:
@@ -48,7 +49,11 @@ def load_config(env: dict[str, str] | None = None) -> BotConfig:
     except ValueError as exc:
         raise RuntimeError("TOKCUT_TARGET must be a number") from exc
 
-    return BotConfig(token, allowed_user_id, workdir, default_target)
+    claude_judge = src.get(
+        "TOKCUT_CLAUDE", "on").strip().lower() not in ("off", "0", "false")
+
+    return BotConfig(token, allowed_user_id, workdir, default_target,
+                     claude_judge)
 
 
 def is_allowed(user_id: int | None, allowed_user_id: int) -> bool:

@@ -19,8 +19,10 @@ from telegram.ext import (
     filters,
 )
 
+from ..analysis import probe
 from ..caption import check_caption
 from ..cli import edit
+from ..judge import claude_available, review_output, suggest_caption
 from .config import BotConfig, is_allowed, load_config
 from .pipeline import derive_caption
 
@@ -73,7 +75,23 @@ async def on_clip(update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    caption = derive_caption(msg.caption, file_name)
+    caption = (msg.caption or "").strip()
+    if not caption and cfg.claude_judge and claude_available():
+        await msg.reply_text("🤖 Asking Claude to watch the clip and "
+                             "write a caption…")
+        try:
+            duration = (await asyncio.to_thread(probe, dest))["duration"]
+            caption, subject = await asyncio.to_thread(
+                suggest_caption, dest, duration)
+            await msg.reply_text(
+                f"🤖 Claude sees: {subject}\n📝 Caption: “{caption}”")
+        except Exception as exc:  # noqa: BLE001 — judgment is best-effort
+            log.warning("caption judgment failed: %s", exc)
+            await msg.reply_text(
+                "🤖 Claude couldn't caption this one — using the filename.")
+            caption = ""
+    if not caption:
+        caption = derive_caption(msg.caption, file_name)
     for warning in check_caption(caption):
         await msg.reply_text(f"⚠️ caption check: {warning}")
 
@@ -104,14 +122,33 @@ async def on_clip(update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await msg.reply_text(f"⚠️ Edit failed: {exc}")
             return
 
+        review_line = ""
+        if cfg.claude_judge and claude_available():
+            await status.edit_text("🤖 Claude is reviewing the result…")
+            try:
+                duration = (await asyncio.to_thread(probe, out))["duration"]
+                review = await asyncio.to_thread(
+                    review_output, out, duration, caption)
+                if review["verdict"] == "approve":
+                    review_line = f"🤖 review: ✅ {review['notes']}"
+                else:
+                    issues = "\n".join(f"• {i}" for i in review["issues"])
+                    review_line = (f"🤖 review: 🔁 would redo:\n{issues}\n"
+                                   f"({review['notes']})")
+            except Exception as exc:  # noqa: BLE001 — review is best-effort
+                log.warning("output review failed: %s", exc)
+
         size_mb = os.path.getsize(out) / 1048576
         await msg.reply_text(f"⬆️ Uploading ({size_mb:.1f} MB)…")
+        doc_caption = (f"✅ “{caption}”\n"
+                       "Muted — add a trending TikTok sound in-app.")
+        if review_line:
+            doc_caption += f"\n\n{review_line}"
         with open(out, "rb") as fh:
             await msg.reply_document(
                 document=fh,
                 filename=os.path.basename(out),
-                caption=(f"✅ “{caption}”\n"
-                         "Muted — add a trending TikTok sound in-app."),
+                caption=doc_caption[:1024],
             )
 
 

@@ -135,7 +135,13 @@ Notes / caveats to keep in mind:
    OOM lesson), streams progress into a status message, and sends the
    finished clip back as a document. Caption = message caption, else
    filename stem.
-3. Wire Claude Code (subscription OAuth) for the caption + output review.
+3. ✅ **Claude Code judgment** (`tokcut/judge.py`) — headless `claude -p`
+   on the subscription token. Python extracts sampled frames; Claude
+   watches them, identifies the subject, and writes the caption (validated
+   against `check_caption`, with alternatives as fallback); after the
+   render Claude reviews the output (hook frame included in the samples,
+   verdicts constrained to fixable problems). Bot uses Claude when no
+   caption is given; `TOKCUT_CLAUDE=off` disables.
 4. Approve/redo inline keyboard + multi-turn session continuity.
 5. Local Bot API server for >50 MB files.
 6. (Later) auto-music, beat-aligned cuts.

@@ -1,19 +1,31 @@
 # Running the Telegram bot
 
-Status: **step 2** — full round-trip. Send a clip, get back the finished
-1080x1920 edit as a document: hook, auto-zoom, speed-ramps, caption, muted
-for an in-app TikTok sound. The Claude-written caption and the
-approve/redo loop come in later steps (see `BOT_ARCHITECTURE.md`).
+Status: **step 3** — Claude in the loop. Send a clip, Claude watches it
+and writes the caption, the bot renders the 1080x1920 edit (hook,
+auto-zoom, speed-ramps, muted for an in-app sound), Claude reviews the
+result, and the finished file comes back as a document. The approve/redo
+conversation is step 4 (see `BOT_ARCHITECTURE.md`).
 
 ## How a clip flows
 
-1. You send a video **as a file** (optionally with a message caption —
-   that text becomes the on-video caption; otherwise the filename is used).
-2. The bot downloads it, runs the caption eligibility check, and queues
-   the render (one at a time — parallel encodes can OOM the box).
-3. A status message updates live with the edit plan and progress.
-4. The finished `.mp4` comes back as a **document** (no recompression),
+1. You send a video **as a file**. If you add a message caption, that
+   exact text is used on-video. If not, **Claude watches sampled frames
+   and writes the caption itself** (subject + caption are messaged to you).
+2. The caption passes the eligibility check; warnings are forwarded.
+3. The render queues (one at a time — parallel encodes can OOM the box)
+   and a status message live-updates with the edit plan and progress.
+4. **Claude reviews the rendered output** (hook, caption legibility,
+   ending) and its verdict is attached to the reply.
+5. The finished `.mp4` comes back as a **document** (no recompression),
    ready to upload to TikTok.
+
+## Claude auth (subscription OAuth)
+
+The judgment layer runs Claude Code headless (`claude -p`). On a dev
+machine an existing `claude` login is enough. On a server, generate a
+long-lived token from your subscription with `claude setup-token` and set
+`CLAUDE_CODE_OAUTH_TOKEN` in the bot's environment. Set `TOKCUT_CLAUDE=off`
+to disable the judgment layer entirely (filename captions, no review).
 
 ## Setup
 
