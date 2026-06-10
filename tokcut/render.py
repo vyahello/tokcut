@@ -1,0 +1,82 @@
+"""ffmpeg render: trim/speed/concat, caption overlay, audio mix, encode."""
+
+import subprocess
+
+from .layout import OUT_H, OUT_W
+
+
+def atempo_chain(speed):
+    """ffmpeg atempo accepts 0.5..2.0; chain factors for larger speeds."""
+    parts = []
+    s = speed
+    while s > 2.0:
+        parts.append(2.0)
+        s /= 2.0
+    parts.append(s)
+    return ",".join(f"atempo={p:.6f}" for p in parts)
+
+
+def build_filtergraph(segs, src, lay, fps, with_music):
+    """Return (filter_complex string, video_label, audio_label|None)."""
+    fc, vlabels, alabels = [], [], []
+    for i, (s, e, sp) in enumerate(segs):
+        fc.append(f"[0:v]trim=start={s:.3f}:end={e:.3f},"
+                  f"setpts=(PTS-STARTPTS)/{sp:.4f}[v{i}]")
+        vlabels.append(f"[v{i}]")
+        if src["audio"]:
+            fc.append(f"[0:a]atrim=start={s:.3f}:end={e:.3f},"
+                      f"asetpts=PTS-STARTPTS,{atempo_chain(sp)}[a{i}]")
+            alabels.append(f"[a{i}]")
+
+    n = len(segs)
+    if src["audio"]:
+        pairs = "".join(v + a for v, a in zip(vlabels, alabels))
+        fc.append(f"{pairs}concat=n={n}:v=1:a=1[vc][amb]")
+        ambient = "[amb]"
+    else:
+        fc.append(f"{''.join(vlabels)}concat=n={n}:v=1[vc]")
+        ambient = None
+
+    vw, vh, vx, vy = lay["vw"], lay["vh"], lay["vx"], lay["vy"]
+    fc.append(f"[vc]fps={fps},scale={vw}:{vh}:flags=lanczos,"
+              f"pad={OUT_W}:{OUT_H}:{vx}:{vy}:black[base]")
+    fc.append(f"[base][1:v]overlay={lay['cap_x']}:{lay['cap_y']},"
+              f"format=yuv420p10le[vout]")
+
+    audio_out = None
+    if with_music:
+        # music is input #2. normalize=0 keeps levels as-authored instead
+        # of amix halving them; ambient sits just under the music bed.
+        if ambient:
+            fc.append("[2:a]volume=0.8[mus]")
+            fc.append(f"{ambient}volume=1.4[amb2];"
+                      f"[amb2][mus]amix=inputs=2:duration=first:"
+                      f"normalize=0:dropout_transition=0[aout]")
+        else:
+            fc.append("[2:a]volume=0.8[aout]")
+        audio_out = "[aout]"
+    elif ambient:
+        audio_out = ambient
+    return ";".join(fc), "[vout]", audio_out
+
+
+def render(path, segs, caption_png, src, lay, out_path,
+           crf=18, preset="medium", music_path=None):
+    fps = min(60, round(src["fps"]))
+    fc, vlabel, alabel = build_filtergraph(
+        segs, src, lay, fps, with_music=bool(music_path))
+
+    cmd = ["ffmpeg", "-y", "-v", "warning", "-stats",
+           "-i", path, "-i", caption_png]
+    if music_path:
+        cmd += ["-stream_loop", "-1", "-i", music_path]
+    cmd += ["-filter_complex", fc, "-map", vlabel]
+    if alabel:
+        cmd += ["-map", alabel, "-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
+    cmd += ["-c:v", "libx265", "-crf", str(crf), "-preset", preset,
+            "-profile:v", "main10", "-tag:v", "hvc1",
+            "-color_primaries", "bt2020", "-color_trc", "arib-std-b67",
+            "-colorspace", "bt2020nc",
+            "-movflags", "+faststart", out_path]
+    subprocess.run(cmd, check=True)
+    return out_path

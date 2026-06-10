@@ -1,0 +1,48 @@
+import os
+
+import pytest
+
+from tokcut import caption as C
+
+
+def test_check_caption_flags_risky_terms():
+    warnings = C.check_caption("Hacking WiFi with deauth attack")
+    joined = " ".join(warnings)
+    assert "hack" in joined
+    assert "deauth" in joined
+    assert "attack" in joined
+
+
+def test_check_caption_clean_passes():
+    assert C.check_caption("Flashing Bruce 1.15 on M5StickC Plus2") == []
+
+
+def test_check_caption_flags_overlong():
+    warnings = C.check_caption("x" * (C.MAX_CAPTION_CHARS + 5))
+    assert any("renders small" in w for w in warnings)
+
+
+def test_balance_lines_two_balanced():
+    a, b = C.balance_lines("Flashing Bruce 1.15 on M5StickC Plus2")
+    assert abs(len(a) - len(b)) <= 6
+
+
+def test_balance_lines_short_single():
+    assert C.balance_lines("hi there") == ["hi there"]
+
+
+def test_split_runs_separates_emoji():
+    runs = C.split_runs("hi ⚡")  # high-voltage emoji
+    assert any(is_emoji for is_emoji, _ in runs)
+    assert any(not is_emoji for is_emoji, _ in runs)
+
+
+@pytest.mark.skipif(not os.path.exists(C.FONT_TEXT),
+                    reason="DejaVu font not installed")
+def test_make_caption_writes_png(tmp_path):
+    out = tmp_path / "cap.png"
+    w, h = C.make_caption("Flashing Bruce 1.15 on M5StickC Plus2", str(out))
+    assert out.exists()
+    assert w > 0 and h > 0
+    from PIL import Image
+    assert Image.open(out).size == (w, h)

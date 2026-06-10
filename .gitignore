@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Media — never commit source footage or renders (large, private)
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.mkv
+*.wav
+*.mp3
+*.m4a
+!tests/fixtures/**
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local config / secrets (Telegram bot token, etc.)
+.env
+*.local
+config.local.*
