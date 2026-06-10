@@ -10,7 +10,7 @@ import numpy as np
 
 SR = 44100
 
-# minor-key root notes (Hz) for a dark, cyber mood
+# minor-key root notes (Hz) for a moody, atmospheric feel
 SCALE = {
     # A minor pentatonic
     "synthwave": [55.00, 65.41, 73.42, 82.41, 98.00],

@@ -1,75 +1,74 @@
 # Ideas: making these videos pop on TikTok
 
-The niche — hacker-gadget / maker POV (flashing firmware, Kali, M5Stick,
-Flipper-adjacent content) — performs very well on TikTok because the visuals
-are inherently "forbidden-tech" aesthetic: dark room, glowing terminal,
-purple device UI. Lean into that.
+Format-level tactics that apply to any vertical clip — tutorials, vlogs,
+screen recordings, builds, process videos — plus the product roadmap.
 
-## Format playbook (what tikedit already does + what to add)
+## Format playbook (what tokcut already does + what to add)
 
-1. **Hook in the first 1.5 s** — never open on a static docs page.
+1. **Hook in the first 1.5 s** — never open on a static, low-energy frame.
    *Idea (next version):* `--hook` flag that finds the highest-motion or
-   most colorful moment (e.g. the Bruce shark boot screen) and prepends
-   1–1.5 s of it as a cold-open teaser before cutting to the start.
-   "Watch the payoff first, then how I got there" massively lifts retention.
-2. **Persistent specific caption** (done) — tool + version + device.
-   Specificity = credibility = saves/shares from people who want to do it.
-3. **Speed ramps instead of cuts** (done) — time-lapse feel keeps the
-   process honest ("no fake, he really did it") which builds the trust you
-   asked about. Viewers rewatch to catch details — that's the loop signal
-   TikTok rewards.
-4. **End on the win** — finish on the device working / green terminal
-   output, not on reading docs. The current motion analysis usually does
-   this naturally; a future `--end-on-action` flag could guarantee it.
+   most visually striking moment and prepends 1–1.5 s of it as a cold-open
+   teaser before cutting to the start. "Show the payoff first, then how I
+   got there" massively lifts retention.
+2. **Persistent specific caption** (done) — say plainly what the viewer is
+   watching. Specificity = clarity = saves/shares from people who want it.
+3. **Speed ramps instead of cuts** (done) — the time-lapse feel keeps a
+   process honest and lets viewers rewatch to catch details — that's the
+   loop signal TikTok rewards.
+4. **End on the payoff** — finish on the result/reveal, not on setup or
+   dead time. The motion analysis usually does this naturally; a future
+   `--end-on-action` flag could guarantee it.
 5. **Loop-friendly ending** — if the last frame visually resembles the
-   first (laptop + device on desk), the video loops seamlessly and TikTok
-   counts the rewatch. Worth framing your shots with this in mind.
+   first, the video loops seamlessly and TikTok counts the rewatch. Worth
+   framing your shots with this in mind.
 
-## Content ideas for the blog (series > one-offs)
+## Content tactics (series > one-offs)
 
-- **"Flashing X on Y" series** — same caption template, same purple
-  caption style every episode → instantly recognizable brand.
-- **Before/after split** — 0.5 s of stock firmware UI → flash → Bruce UI.
-- **"What this $30 device can do" follow-ups** — each Bruce feature
-  (WiFi tools, IR, BadUSB demo *on your own gear*) is its own clip.
-- **Fail clips** — a flash that bricks/errors and the recovery. Fail+fix
-  outperforms clean success for engagement.
-- Post 3–5 per week at consistent times; reply to every technical comment
-  (comments are the strongest ranking signal in small niches).
+- **Consistent template** — same caption style and structure every episode
+  makes your feed instantly recognizable as a brand.
+- **Before/after** — a half-second of the "before" state up front, then the
+  transformation, reads as an irresistible payoff.
+- **Break a topic into a series** — one idea per clip keeps each video tight
+  and gives viewers a reason to follow for the next part.
+- **Show the fails** — a mistake and the recovery outperforms a clean
+  success for engagement; it's relatable and re-watchable.
+- Post consistently (3–5/week at steady times) and reply to comments —
+  comments are one of the strongest ranking signals, especially early on.
 
-## Trust & quality signals
+## Quality signals
 
 - 10-bit HEVC + HLG preserved (done) — footage keeps the rich phone-camera
   look instead of going gray after upload.
-- Real-time audio kept under speed-ups (done) — keyboard/device sounds
-  read as authentic even under music.
-- No AI voice-over, no stock transitions — raw POV is the brand.
+- Original audio kept under speed-ups (done) — real ambient sound reads as
+  authentic even with a music bed on top.
+- No AI voice-over, no stock transitions — keep it feeling real.
 
 ## Roadmap: Telegram bot (the ideal workflow)
 
-Goal: film on phone → share to Telegram bot → get back the edited file.
+Goal: film on phone → share to a private Telegram bot → get back the edited
+file, review, approve or redo.
 
 **Architecture (simple and sufficient):**
 
 ```
 phone ──(video file, NOT photo-compressed)──> Telegram bot (python-telegram-bot)
-   bot downloads file → asks for caption text (or takes it from the
-   message caption) → runs tikedit.py → sends result back as *document*
+   bot downloads file → runs tokcut → sends result back as *document*
 ```
 
-**Conversation flow (owner-approved design):**
+**Conversation flow:**
 
 ```
-1. Owner uploads raw clip (as file/document)
+1. Upload raw clip (as file/document)
 2. Bot analyses it fully automatically:
-     - motion edit plan (tikedit)
-     - caption text (vision model reads the frames → "Flashing X on Y ⚡")
+     - motion edit plan (tokcut)
+     - caption text (vision model reads the frames and proposes one)
      - caption position (saliency auto-placement, already implemented)
+     - eligibility check (check_caption) before render
 3. Bot renders and sends the result back as a document
-4. Owner reviews on the phone: [✅ Approve] [🔁 Redo]
+4. Review on the phone: [✅ Approve] [🔁 Redo]
      - Redo asks what to change (shorter/longer, different caption,
-       caption elsewhere, more/less speed-up) via inline buttons,
-       re-renders with adjusted params
+       caption elsewhere, more/less speed-up, music on/off) via inline
+       buttons, then re-renders with adjusted params
 ```
 
 Key implementation notes for when we build it:
@@ -86,33 +85,33 @@ Key implementation notes for when we build it:
 - Queue renders (one at a time) — x265 is CPU-heavy.
 - Allow-list your own Telegram user ID; this bot should be private.
 
-## Roadmap: automatic audio (cybersecurity / pentesting vibe)
+## Roadmap: automatic audio
 
-Owner wants the bot to eventually set music too. Two realities to balance:
+The bot should eventually set music too. Two realities to balance:
 
-- **In-app TikTok sounds rank better** — trending sounds feed discovery
-  and "use this sound" traffic, and commercial tracks added outside the
-  app can get the video muted by copyright detection.
+- **In-app TikTok sounds rank better** — trending sounds feed discovery and
+  "use this sound" traffic, and commercial tracks added outside the app can
+  get the video muted by copyright detection.
 - **Baked-in audio saves time** and lets us sync edits to the beat.
 
 Plan:
 
-1. Maintain a local library of **royalty-free dark synthwave / phonk /
-   cyberpunk tracks** (the pentesting aesthetic), tagged by BPM and mood.
-2. Bot picks a track matching the clip duration/energy, mixes it under
-   the ambient audio (music ~ -8 dB, ambient keyboard sounds kept low —
-   authenticity signal).
+1. Keep the built-in synthesized tracks (`tokcut.music`, zero copyright
+   risk) and optionally maintain a small library of royalty-free tracks
+   tagged by BPM and mood.
+2. Bot picks a track matching the clip duration/energy and mixes it under
+   the original audio (music as a bed, original sound kept audible).
 3. **Beat-aligned editing** (the killer feature): snap speed-ramp segment
    boundaries to the track's beat grid, so cuts land on the beat —
    instantly looks professionally edited.
-4. Approve/redo flow gets a [🎵 Change track] button; "no music" stays
-   an option for posts where a trending in-app sound is the better play.
+4. Approve/redo flow gets a [🎵 Change track] button; "no music" stays an
+   option for posts where a trending in-app sound is the better play.
 
 **Stretch ideas:**
 
-- Auto-caption suggestion: OCR a few frames (tesseract) to detect the tool
-  name/version on screen and propose the caption automatically.
+- Auto-caption suggestion via a vision model (or OCR for on-screen text),
+  proposing 2–3 caption options per upload.
 - `--hook` cold-open (see above) as a bot toggle.
-- Auto-generate 3 caption/hashtag suggestions per upload.
+- Auto-generate caption/hashtag suggestions per upload.
 - Optional 1.05x micro speed-up of ACTION segments — keeps perceived pace
-  high without looking sped-up (common pro-editor trick).
+  high without looking sped-up (a common pro-editor trick).

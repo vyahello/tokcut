@@ -1,12 +1,13 @@
-# tokcut — personal auto TikTok editor for tech/maker POV clips
+# tokcut — auto TikTok editor
 
 ## What this project is
 
-A pipeline that turns raw phone clips (long, with dead time) into tight,
-high-quality vertical TikTok videos: redundant chunks fast-forwarded, action
-kept at real speed, a persistent styled caption auto-placed where it won't
-cover the action, and optional synthesized music mixed under the ambient
-audio. Personal tool for the owner's hacker-gadget/maker blog.
+A general-purpose pipeline that turns raw phone clips (long, with dead time)
+into tight, high-quality vertical TikTok videos: redundant chunks
+fast-forwarded, action kept at real speed, a persistent styled caption
+auto-placed where it won't cover the action, and optional synthesized music
+mixed under the original audio. Works for any talking-head, screen-recording,
+tutorial, vlog, or process video.
 
 End goal: record on phone → send to a private Telegram bot → bot returns the
 edited clip ready to post (see `docs/IDEAS.md`).
@@ -63,13 +64,13 @@ edited clip ready to post (see `docs/IDEAS.md`).
 - **Never strip the color tags** — source is iPhone HLG; encoding without
   `-color_trc arib-std-b67` makes footage look washed out.
 - Output stays **1080x1920, ≥30fps (keep 60 if source is 60), 10-bit HEVC**
-  — quality is a hard requirement for the blog.
-- One caption per video, persistent for the entire duration. Name the exact
-  thing happening (tool + version + device), e.g. "Flashing Bruce 1.15 on
-  M5StickC Plus2 ⚡". Run it past `check_caption` — no offensive-security
-  wording or TikTok may flag/shadowban.
+  — quality is a hard requirement.
+- One caption per video, persistent for the entire duration. Make it
+  specific about what the viewer is watching, e.g. "How I set this up ⚡".
+  Run it past `check_caption` — sensational/policy-sensitive wording can
+  get the post flagged/shadowbanned.
 - Music is **off by default** — in-app TikTok sounds rank better. `--music`
-  is opt-in for the baked-in synthwave/phonk vibe.
+  is opt-in for the baked-in synthwave/phonk track.
 - Use `--dry-run` first when tuning: prints the edit decision list without
   encoding (encode takes minutes).
 
@@ -81,17 +82,17 @@ venv/bin/pytest          # 30 tests, < 1s, no ffmpeg required
 venv/bin/ruff check tokcut tests
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff + pytest on 3.10–3.12. The deploy
+CI (`.github/workflows/ci.yml`) runs ruff + pytest on 3.11–3.13. The deploy
 stage is stubbed (`if: ... && false`) until the VPS/Telegram bot exists.
 
 ## Reproduce the sample result
 
 ```bash
 venv/bin/python3 -m tokcut original.MOV \
-  -c "Flashing Bruce 1.15 on M5StickC Plus2 ⚡" \
+  -c "How I set this up ⚡" \
   --target 53 -o auto_edited.mp4
 # with music:
 venv/bin/python3 -m tokcut original.MOV \
-  -c "Flashing Bruce 1.15 on M5StickC Plus2 ⚡" \
+  -c "How I set this up ⚡" \
   --target 53 --music --music-style phonk -o auto_edited_music.mp4
 ```

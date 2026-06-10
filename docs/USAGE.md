@@ -21,7 +21,7 @@ Output lands next to the input as `YOUR_CLIP_tokcut.mp4` unless you pass
 | `--target N` | none | Solve speed-ups so the result is ≈ N seconds. Without it, base speeds are used (dead 3.2x, lag 1.7x, action 1x). |
 | `--caption-pos` | `auto` | `auto` builds a saliency map (motion + detail + brightness over the whole video) and places the caption over the calmest region inside the TikTok safe zone, so it never covers the screen/device. `top` pins it just below the top UI bar; `bottom` uses a letterboxed band below the video (legacy style — risks TikTok UI overlap). |
 | `--music [FILE]` | off | Bare flag synthesizes a royalty-free track; pass a path to use your own audio. Mixed under the ambient sound. |
-| `--music-style` | synthwave | `synthwave` or `phonk` (the darker, heavier pentesting vibe). |
+| `--music-style` | synthwave | `synthwave` or `phonk` (the darker, heavier one). |
 | `--music-bpm N` | 84 | Tempo of the synthesized track. |
 | `--crf N` | 18 | x265 quality (lower = better/bigger). 18 is visually lossless for screen content. |
 | `--preset P` | medium | x265 preset. Use `fast` if you're in a hurry, `slow` for max quality. |
@@ -42,41 +42,38 @@ Output lands next to the input as `YOUR_CLIP_tokcut.mp4` unless you pass
 
 - **In-app TikTok sound (no `--music`)** ranks better — trending sounds
   drive discovery, and the app won't mute you for copyright. Default to this.
-- **Baked-in (`--music`)** is for when you want the dark-synthwave/phonk
-  vibe guaranteed, or to post the same clip off-platform. The track is
-  synthesized (zero copyright risk) and ducked under your ambient audio.
+- **Baked-in (`--music`)** is for when you want a guaranteed vibe, or to
+  post the same clip off-platform. The track is synthesized (zero copyright
+  risk) and ducked under your original audio.
 
 ## Picking a target duration
 
-- TikTok sweet spot for this format: **35–60 s**.
-- Rule of thumb: target ≈ 55 % of the raw duration for desk/screen footage.
+- TikTok sweet spot: **35–60 s**.
+- Rule of thumb: target ≈ 55 % of the raw duration.
 - Don't go below ~35 % of raw length — fast-forward above ~5x starts to
   look like a glitch instead of a time-lapse.
 
-## Caption guidelines (what works for the blog)
+## Caption guidelines
 
-- Name the **exact tool + version + device**: "Flashing Bruce 1.15 on
-  M5StickC Plus2 ⚡" — specificity reads as competence and is searchable.
+- Be **specific** about what the viewer is watching — a concrete caption
+  ("How I set up my new desk", "Day 3 of the build") reads as intentional
+  and is searchable; vague ones ("check this out") get scrolled past.
 - Keep it under ~40 characters so both lines stay big and readable.
 - One caption for the whole video — no mid-video text changes.
 
 ### TikTok eligibility (avoid getting flagged or shadowbanned)
 
-TikTok OCRs on-screen text and its moderation reacts to offensive-security
-wording, especially combined with hacking-tool visuals. `tikedit` warns
-automatically (`check_caption`) about risky terms — heed the warnings:
+TikTok OCRs on-screen text, and its moderation penalizes sensational or
+policy-sensitive wording. `tokcut` warns automatically (`check_caption`)
+about risky terms — heed the warnings:
 
-- **Avoid in captions**: hack/hacking/hacker, attack, exploit, deauth,
-  crack, bypass, payload, spy, jam, steal, "free wifi".
-- **Use instead**: flashing, firmware, modding, testing *my own* device,
-  setup, tinkering. Descriptive beats edgy — "Flashing Bruce 1.15" is
-  safe; "Hacking WiFi with this $30 device" risks removal under the
-  criminal-activities policy.
-- Same rule applies to the TikTok description/hashtags you type when
-  posting: prefer #firmware #esp32 #m5stack #maker #cybersecurity
-  (allowed, educational) over #hacked #wifihack type tags.
-- Framing matters: "on my own gear / in my lab" keeps demos clearly
-  educational, which is the carve-out TikTok's policy allows.
+- **Terms it flags by default**: hack/hacking/hacker, attack, exploit,
+  deauth, crack, bypass, payload, spy, jam, steal, "free wifi". (Edit
+  `RISKY_TERMS` in `tokcut/caption.py` to fit your own content.)
+- **Prefer descriptive over edgy** — phrasing that plainly says what's
+  happening is safe; clickbait that implies wrongdoing risks removal.
+- The same applies to the description and hashtags you type when posting:
+  keep them descriptive and on-topic rather than sensational.
 
 ## Quality notes
 

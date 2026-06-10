@@ -8,21 +8,21 @@ FONT_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
 PURPLE = (147, 88, 235, 255)
 BOX_FILL = (252, 250, 255, 238)
 
-# TikTok OCRs on-screen text; these terms combined with hacking-tool
-# visuals commonly trigger moderation / reduced reach. Keep captions
-# descriptive ("flashing firmware X on device Y") instead of offensive.
+# TikTok OCRs on-screen text; these terms commonly trigger moderation or
+# reduced reach. Keep captions descriptive rather than sensational. The
+# list is conservative — edit it to fit your own content.
 RISKY_TERMS = {
-    "hack": "flash / mod / set up",
-    "hacking": "tinkering / firmware modding",
-    "hacker": "maker / security researcher",
-    "attack": "test (on my own gear)",
-    "exploit": "feature / capability",
-    "deauth": "wifi testing",
-    "crack": "test",
-    "bypass": "configure",
-    "spy": "monitor (own devices)",
-    "payload": "script",
-    "jam": "test",
+    "hack": "set up / build / make",
+    "hacking": "building / tinkering",
+    "hacker": "creator / builder",
+    "attack": "try / test",
+    "exploit": "feature / trick",
+    "deauth": None,
+    "crack": "open / solve",
+    "bypass": "skip / work around",
+    "spy": "watch / track",
+    "payload": "file / script",
+    "jam": None,
     "steal": None,
     "free wifi": None,
 }

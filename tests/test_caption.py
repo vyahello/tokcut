@@ -14,7 +14,7 @@ def test_check_caption_flags_risky_terms():
 
 
 def test_check_caption_clean_passes():
-    assert C.check_caption("Flashing Bruce 1.15 on M5StickC Plus2") == []
+    assert C.check_caption("How I set up my new desk") == []
 
 
 def test_check_caption_flags_overlong():
@@ -23,7 +23,7 @@ def test_check_caption_flags_overlong():
 
 
 def test_balance_lines_two_balanced():
-    a, b = C.balance_lines("Flashing Bruce 1.15 on M5StickC Plus2")
+    a, b = C.balance_lines("How I set up my brand new desk")
     assert abs(len(a) - len(b)) <= 6
 
 
@@ -41,7 +41,7 @@ def test_split_runs_separates_emoji():
                     reason="DejaVu font not installed")
 def test_make_caption_writes_png(tmp_path):
     out = tmp_path / "cap.png"
-    w, h = C.make_caption("Flashing Bruce 1.15 on M5StickC Plus2", str(out))
+    w, h = C.make_caption("How I set up my brand new desk", str(out))
     assert out.exists()
     assert w > 0 and h > 0
     from PIL import Image

@@ -4,8 +4,8 @@
 
 ### raw phone clip in → scroll-stopping TikTok out
 
-*Point your phone at the screen, ramble for 90 seconds, let `tokcut` cut the
-boring bits, slap on a clean caption, and drop a dark-synth beat underneath.*
+*Shoot a long, messy clip, let `tokcut` cut the boring bits, slap on a clean
+caption, and drop a beat underneath — ready to upload.*
 
 [![CI](https://github.com/vyahello/tokcut/actions/workflows/ci.yml/badge.svg)](https://github.com/vyahello/tokcut/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-blue?logo=python&logoColor=white)](https://www.python.org)
@@ -18,14 +18,14 @@ boring bits, slap on a clean caption, and drop a dark-synth beat underneath.*
 
 ---
 
-Personal auto-editor that turns raw phone footage into tight, high-quality
+An auto-editor that turns raw phone footage into tight, high-quality
 vertical TikTok clips. 🎯 Motion analysis drives speed-ramps (boring stretches
 fast-forwarded ⏩, action kept real-time ▶️), a persistent styled caption is
 auto-placed where it won't cover the action 🏷️, and an optional synthesized
-dark-synthwave / phonk track 🎧 is mixed under the ambient audio.
+music track 🎧 is mixed under the original audio.
 
-Built for a personal hacker-gadget / maker blog — flashing firmware,
-glowing terminals, M5Stick, the whole forbidden-tech aesthetic. 🛠️⚡
+Works for any talking-to-camera, screen-recording, tutorial, vlog, or
+process video where there's dead time to trim and a moment worth keeping. 🎬
 
 ## ✨ What it does for you
 
@@ -33,8 +33,8 @@ glowing terminals, M5Stick, the whole forbidden-tech aesthetic. 🛠️⚡
 |---|---|
 | ⏩ **Kills dead air** | Fast-forwards the parts where you're just reading docs; keeps the payoff at 1x |
 | 🏷️ **Smart captions** | Purple-on-white sticker text, auto-placed over the calmest part of the frame so it never hides your screen |
-| 🛡️ **Won't get you flagged** | Warns about wording TikTok's moderation hates (`hack`, `deauth`, `exploit`…) before you post |
-| 🎧 **Instant vibe** | Generates a royalty-free synthwave/phonk bed — zero copyright strikes |
+| 🛡️ **Won't get you flagged** | Warns about wording TikTok's moderation tends to penalize before you post |
+| 🎧 **Instant vibe** | Generates a royalty-free music bed (synthwave / phonk) — zero copyright strikes |
 | 📱 **Phone-grade quality** | 1080×1920, 10-bit HEVC, iPhone HLG color preserved — survives TikTok's re-encode |
 
 ## 📦 Install
@@ -51,13 +51,13 @@ System requirements: `ffmpeg`/`ffprobe` with libx265, fonts
 
 ```bash
 # preview the cut plan (instant, no encode)
-tokcut clip.MOV -c "Flashing Bruce 1.15 on M5StickC Plus2 ⚡" --target 50 --dry-run
+tokcut clip.MOV -c "How I set this up ⚡" --target 50 --dry-run
 
 # render, no music (you add a trending sound in TikTok)
-tokcut clip.MOV -c "Flashing Bruce 1.15 on M5StickC Plus2 ⚡" --target 50
+tokcut clip.MOV -c "How I set this up ⚡" --target 50
 
 # render with a synthesized phonk track baked in
-tokcut clip.MOV -c "Flashing Bruce 1.15 on M5StickC Plus2 ⚡" --target 50 --music --music-style phonk
+tokcut clip.MOV -c "How I set this up ⚡" --target 50 --music --music-style phonk
 
 # or your own audio file
 tokcut clip.MOV -c "..." --music ~/tracks/mytrack.mp3
@@ -119,6 +119,6 @@ plus 🥁 beat-aligned music cuts. See [`docs/IDEAS.md`](docs/IDEAS.md).
 
 <div align="center">
 
-Made for one creator's blog. 🖤 Licensed MIT — take it and remix it.
+Built for creators who'd rather film than edit. 🖤 Licensed MIT — take it and remix it.
 
 </div>
