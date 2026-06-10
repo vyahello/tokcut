@@ -77,25 +77,30 @@ The "review your own output" step (`inspect_output` → critique) is what
 and catches a chopped reveal or a mis-worded caption *before* you ever see
 it. Bound re-renders (e.g. max 2) to cap latency/cost.
 
-## Auth: "claude code via oauth" vs API key
+## Auth: Claude Code subscription OAuth (decided)
 
-Both work. The honest tradeoff:
+**Decision: use the Claude subscription via OAuth**, not a metered API key.
+Generate a long-lived token with `claude setup-token` and put it in the
+bot's environment as `CLAUDE_CODE_OAUTH_TOKEN`. The judgment work runs
+through **Claude Code headless** (`claude -p …`) or the Claude Agent SDK,
+both of which pick up that token — so caption/review costs draw from the
+Max-plan quota instead of a per-token bill.
 
-- **Subscription OAuth** (your Claude Max plan, via `ant auth login` /
-  Claude Code's `setup-token`): no per-token bill. But interactive OAuth
-  login is designed for **dev machines**; for an always-on server
-  Anthropic's documented path is Workload Identity Federation, and running
-  a personal subscription token in an automated bot is a gray area worth
-  checking against current terms.
-- **API key**: unambiguous for programmatic/server use, pay-as-you-go.
+Division of labor (the user's rule): **everything Python can do, Python
+does** — Telegram I/O, allow-list, downloads, running `tokcut`, frame
+extraction. **Everything else goes to Claude Code** — reading frames to
+write the caption, reviewing the rendered output, and turning redo feedback
+into parameter changes.
 
-**Recommendation: start with an API key.** The volume here is tiny — a few
-Claude calls per video, each viewing ~10 small frames — so cost is roughly
-**$0.30–0.50 per video** on `claude-opus-4-8` (less with prompt caching of
-the system prompt). That's cheap enough that the API key's reliability and
-clean ToS story beat the subscription's "free" tokens. We can switch to
-profile-based OAuth later if you'd rather burn Max-plan quota — the SDK
-honors `ant auth login` profiles, so it's a config change, not a rewrite.
+Notes / caveats to keep in mind:
+- Interactive OAuth login targets dev machines; on the VPS use the
+  `setup-token` long-lived token in the service environment (systemd
+  `EnvironmentFile`, not the repo).
+- Subscription usage has rate/usage limits rather than per-call billing —
+  fine at this volume (a few calls per video), but back off and retry on
+  limit responses.
+- If we ever outgrow the subscription, switching to an API key is a config
+  change, not a rewrite.
 
 ## Reliability & safety
 
@@ -121,11 +126,12 @@ honors `ant auth login` profiles, so it's a config change, not a rewrite.
 - **Non-deterministic wording** — Claude may phrase the caption differently
   run to run. Fine here; pin with low effort if you want stability.
 
-## Build order (when we start)
+## Build order
 
-1. Bot skeleton: `python-telegram-bot`, allow-list, receive document.
-2. Wrap `tokcut` calls as the tool functions above.
-3. Wire the Anthropic client + tool loop (API key).
+1. ✅ **Bot skeleton** — `python-telegram-bot`, allow-list, receive
+   document, reply with the dry-run edit plan. (`tokcut/bot/`, see `BOT.md`.)
+2. Wrap `tokcut` render as a tool function; reply with the finished clip.
+3. Wire Claude Code (subscription OAuth) for the caption + output review.
 4. Approve/redo inline keyboard + multi-turn session continuity.
 5. Local Bot API server for >50 MB files.
-6. (Later) auto-music, beat-aligned cuts, OAuth-profile auth if wanted.
+6. (Later) auto-music, beat-aligned cuts.
