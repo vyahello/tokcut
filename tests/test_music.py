@@ -38,3 +38,18 @@ def test_write_wav_roundtrip(tmp_path):
         assert w.getframerate() == M.SR
         assert w.getnchannels() == 1
         assert w.getnframes() == int(1.0 * M.SR)
+
+
+def test_style_bpm_defaults():
+    from tokcut.music import STYLE_BPM, generate
+    assert STYLE_BPM["phonk"] > STYLE_BPM["synthwave"]
+    # bpm=None resolves to the style default and still renders
+    track = generate(2.0, style="phonk")
+    assert len(track) == 2 * 44100
+
+
+def test_phonk_differs_from_explicit_slow_bpm():
+    from tokcut.music import generate
+    fast = generate(2.0, style="phonk")          # 132 default
+    slow = generate(2.0, bpm=84, style="phonk")  # pinned slow
+    assert not (fast == slow).all()

@@ -103,8 +103,9 @@ async def _render_and_deliver(msg, context: ContextTypes.DEFAULT_TYPE,
     async with lock:  # renders are sequential: parallel x265 OOMs the box
         session.revision += 1
         rev = session.revision
-        status = await msg.reply_text(
-            f"🎞️ Take {rev}, rolling: “{session.caption}”")
+        tag = (f": “{session.caption}”" if session.caption
+               else " (landscape, no caption)")
+        status = await msg.reply_text(f"🎞️ Take {rev}, rolling{tag}")
         loop = asyncio.get_running_loop()
         progress: list[str] = []
 
@@ -159,7 +160,9 @@ async def _render_and_deliver(msg, context: ContextTypes.DEFAULT_TYPE,
         size_mb = os.path.getsize(out) / 1048576
         await status.edit_text(
             f"📤 Sending take {rev} your way ({size_mb:.1f} MB)…")
-        doc_caption = f"🎬 Take {rev} · “{session.caption}”"
+        doc_caption = (f"🎬 Take {rev} · “{session.caption}”"
+                       if session.caption else
+                       f"🎬 Take {rev} · 🖥️ landscape, add your caption")
         if not p.music_style and not p.keep_audio:
             doc_caption += "\n🔇 Muted — add a trending sound in TikTok."
         if review_line:
@@ -214,18 +217,32 @@ async def on_clip(update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"⚠️ Couldn't download that file: {exc}\n{hint}")
         return
 
+    try:
+        src = await asyncio.to_thread(probe, dest)
+    except Exception as exc:  # noqa: BLE001 — not a video / corrupt file
+        log.exception("probe failed")
+        await status.edit_text(f"⚠️ That doesn't look like a video: {exc}")
+        return
+
     caption = (msg.caption or "").strip()
     subject = ""
-    if not caption and cfg.claude_judge and claude_available():
+    if src["w"] > src["h"]:
+        # landscape: native resolution, no caption (no fullscreen room)
+        caption = ""
+        await status.edit_text(
+            "🖥️ Landscape clip — keeping the native resolution so it can "
+            "go fullscreen in TikTok. Cuts, speed-ups and edge trims "
+            "only; overlay your own caption when posting.")
+    elif not caption and cfg.claude_judge and claude_available():
         await status.edit_text("👀 Claude is watching your clip to write "
                                "a caption…")
         caption, subject = await _claude_caption(msg, dest)
         if caption:
             await status.edit_text(
                 f"👀 Claude saw: {subject}\n✍️ Caption: “{caption}”")
-    if not caption:
+    if not caption and src["w"] <= src["h"]:
         caption = derive_caption(msg.caption, file_name)
-    for warning in check_caption(caption):
+    for warning in check_caption(caption) if caption else []:
         await msg.reply_text(f"⚠️ caption check: {warning}")
 
     session = EditSession(source=dest, file_name=file_name,

@@ -17,6 +17,7 @@ from .analysis import (
     beat_align,
     classify,
     content_crop,
+    edit_window,
     motion_scores,
     pick_hook,
     probe,
@@ -27,9 +28,14 @@ from .analysis import (
 )
 from .caption import DEFAULT_STYLE, STYLES, check_caption, make_caption
 from .layout import compute_layout
-from .music import generate, write_wav
+from .music import STYLE_BPM, generate, write_wav
 from .render import render
-from .types import SourceInfo, SpeedSegment
+from .types import Layout, SourceInfo, SpeedSegment
+
+
+def is_landscape(src: SourceInfo) -> bool:
+    """Landscape sources stay native: no vertical canvas, no caption."""
+    return src["w"] > src["h"]
 
 
 def _parse_target(value: str) -> float | str | None:
@@ -46,8 +52,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="tokcut", description="Auto-editor for vertical TikTok clips")
     ap.add_argument("input")
-    ap.add_argument("-c", "--caption", required=True,
-                    help="Persistent caption text (emoji supported)")
+    ap.add_argument("-c", "--caption", default="",
+                    help="Persistent caption text (emoji supported). "
+                         "Required for vertical sources; landscape "
+                         "sources never get a caption (overlay your own)")
     ap.add_argument("-o", "--output", default=None)
     ap.add_argument("--target", type=_parse_target, default="auto",
                     help="Output length: seconds, 'auto' (default — solve "
@@ -76,7 +84,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "own audio file. For off-platform posts.")
     ap.add_argument("--music-style", choices=["synthwave", "phonk"],
                     default="synthwave")
-    ap.add_argument("--music-bpm", type=int, default=84)
+    ap.add_argument("--music-bpm", type=int, default=None,
+                    help="Tempo of the synthesized track (default: the "
+                         "style's own — synthwave 84, phonk 132)")
     ap.add_argument("--crf", type=int, default=18)
     ap.add_argument("--preset", default="medium")
     ap.add_argument("--dry-run", action="store_true",
@@ -102,12 +112,15 @@ def plan(
     src = probe(input_path)
     raw_scores, frames = motion_scores(input_path, src)
     scores = smooth(raw_scores)
-    # the last beat of a recording is usually the stop-the-recording
-    # shuffle (alt-tab, reaching for the hotkey) — never include it
+    # recording edges are never content: the tail is the stop-the-
+    # recording shuffle, and landscape screen recordings open/close on
+    # the capture tool's UI (OBS & friends) — hard-trim both
     dur = src["duration"]
-    dur_eff = dur - 2.0 if dur > 20.0 else dur
+    head, dur_eff = edit_window(dur, is_landscape(src))
     runs = trim_dead_ends(
         to_segments(classify(scores), duration=dur_eff))
+    if head:
+        runs = [[max(s, head), e, t] for s, e, t in runs if e > head]
     if target == "auto":
         target = auto_target(runs)
     target = cast("float | None", target)
@@ -135,7 +148,7 @@ def edit(
     keep_audio: bool = False,
     music: str | None = None,
     music_style: str = "synthwave",
-    music_bpm: int = 84,
+    music_bpm: int | None = None,
     crf: int = 18,
     preset: str = "medium",
     dry_run: bool = False,
@@ -145,11 +158,19 @@ def edit(
 
     The reusable core behind both the CLI and the Telegram bot.
     `on_progress` receives short human-readable status lines.
+
+    Landscape sources keep their native resolution — same cuts, speeds,
+    hook, crop and music, but no vertical canvas and **no caption** (a
+    landscape video in TikTok can't go fullscreen behind a baked caption;
+    the creator overlays their own).
     """
     notify = on_progress or (lambda _line: None)
     out = output or os.path.splitext(input_path)[0] + "_tokcut.mp4"
 
     src, segs, est, frames, hook_win = plan(input_path, target, hook)
+    landscape = is_landscape(src)
+    if not landscape and not caption.strip():
+        raise ValueError("a caption is required for vertical output (-c)")
     notify(f"source: {src['w']}x{src['h']}  {src['duration']:.1f}s "
            f"@ {src['fps']:.0f}fps  "
            f"({src.get('transfer') or 'unknown'} transfer)")
@@ -159,12 +180,13 @@ def edit(
         notify(f"crop: zoom into {crop[2]}x{crop[3]} "
                f"at ({crop[0]},{crop[1]})")
 
+    bpm = music_bpm or STYLE_BPM.get(music_style, 84)
     if music == "__auto__":
         # the synthesized track has a known, exact beat grid — snap the
         # cuts onto it so every segment change lands on a beat
-        segs = beat_align(segs, music_bpm, src["duration"])
+        segs = beat_align(segs, bpm, src["duration"])
         est = sum((e - s) / v for s, e, v in segs)
-        notify(f"beat-align: cuts snapped to the {music_bpm}bpm grid")
+        notify(f"beat-align: cuts snapped to the {bpm}bpm grid")
 
     lines = [f"edit plan ({len(segs)} segments, ~{est:.1f}s output):"]
     for i, (s, e, sp) in enumerate(segs):
@@ -181,31 +203,38 @@ def edit(
 
     tmp = tempfile.mkdtemp(prefix="tokcut_")
     try:
-        cap_png = os.path.join(tmp, "caption.png")
-        cap_size = make_caption(caption, cap_png, style=style)
+        cap_png: str | None = None
+        lay: Layout | None = None
+        if landscape:
+            notify("landscape source: native resolution kept, no caption "
+                   "(overlay your own)")
+        else:
+            cap_png = os.path.join(tmp, "caption.png")
+            cap_size = make_caption(caption, cap_png, style=style)
 
-        # layout works on post-crop dimensions; the caption-placement
-        # saliency map must describe the same (cropped) picture
-        lay_src = src
-        lay_frames = frames
-        if crop:
-            ah, aw = frames.shape[1], frames.shape[2]
-            ax0 = crop[0] * aw // src["w"]
-            ay0 = crop[1] * ah // src["h"]
-            ax1 = max(ax0 + 2, (crop[0] + crop[2]) * aw // src["w"])
-            ay1 = max(ay0 + 2, (crop[1] + crop[3]) * ah // src["h"])
-            lay_frames = frames[:, ay0:ay1, ax0:ax1]
-            lay_src = cast(SourceInfo, dict(src, w=crop[2], h=crop[3]))
-        sal = saliency_map(lay_frames) if caption_pos == "auto" else None
-        lay = compute_layout(lay_src, cap_size, caption_pos, sal)
-        notify(f"caption at y={lay['cap_y']} ({caption_pos})")
+            # layout works on post-crop dimensions; the caption-placement
+            # saliency map must describe the same (cropped) picture
+            lay_src = src
+            lay_frames = frames
+            if crop:
+                ah, aw = frames.shape[1], frames.shape[2]
+                ax0 = crop[0] * aw // src["w"]
+                ay0 = crop[1] * ah // src["h"]
+                ax1 = max(ax0 + 2, (crop[0] + crop[2]) * aw // src["w"])
+                ay1 = max(ay0 + 2, (crop[1] + crop[3]) * ah // src["h"])
+                lay_frames = frames[:, ay0:ay1, ax0:ax1]
+                lay_src = cast(SourceInfo, dict(src, w=crop[2], h=crop[3]))
+            sal = (saliency_map(lay_frames)
+                   if caption_pos == "auto" else None)
+            lay = compute_layout(lay_src, cap_size, caption_pos, sal)
+            notify(f"caption at y={lay['cap_y']} ({caption_pos})")
 
         music_path: str | None = None
         if music == "__auto__":
             music_path = os.path.join(tmp, "music.wav")
-            write_wav(generate(max(est, 1.0) + 2, bpm=music_bpm,
+            write_wav(generate(max(est, 1.0) + 2, bpm=bpm,
                                style=music_style), music_path)
-            notify(f"music: synthesized {music_style} @ {music_bpm}bpm")
+            notify(f"music: synthesized {music_style} @ {bpm}bpm")
         elif music:
             music_path = music
             notify(f"music: {music_path}")
@@ -225,27 +254,32 @@ def edit(
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    for warning in check_caption(args.caption):
-        print(f"⚠ caption check: {warning}", file=sys.stderr)
+    if args.caption:
+        for warning in check_caption(args.caption):
+            print(f"⚠ caption check: {warning}", file=sys.stderr)
 
-    out = edit(
-        args.input,
-        args.caption,
-        output=args.output,
-        target=args.target,
-        style=args.style,
-        caption_pos=args.caption_pos,
-        hook=args.hook,
-        crop_enabled=args.crop,
-        keep_audio=args.keep_audio,
-        music=args.music,
-        music_style=args.music_style,
-        music_bpm=args.music_bpm,
-        crf=args.crf,
-        preset=args.preset,
-        dry_run=args.dry_run,
-        on_progress=print,
-    )
+    try:
+        out = edit(
+            args.input,
+            args.caption,
+            output=args.output,
+            target=args.target,
+            style=args.style,
+            caption_pos=args.caption_pos,
+            hook=args.hook,
+            crop_enabled=args.crop,
+            keep_audio=args.keep_audio,
+            music=args.music,
+            music_style=args.music_style,
+            music_bpm=args.music_bpm,
+            crf=args.crf,
+            preset=args.preset,
+            dry_run=args.dry_run,
+            on_progress=print,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if not args.dry_run:
         print(f"done: {out}")
     return 0

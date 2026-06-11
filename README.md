@@ -40,6 +40,7 @@ process video where there's dead time to trim and a moment worth keeping. 🎬
 | 🛡️ **Won't get you flagged** | Warns about wording TikTok's moderation tends to penalize before you post |
 | 🔇 **Ready for in-app sound** | Exports silent by default so you tap a trending TikTok sound — or bake in royalty-free music with `--music` |
 | 📱 **Phone-grade quality** | 1080×1920, 10-bit HEVC, iPhone HLG color preserved — survives TikTok's re-encode |
+| 🖥️ **Landscape-aware** | Laptop/OBS recordings keep native resolution (so they can go fullscreen), recorder-UI edges auto-trimmed, no baked caption |
 
 ## 📦 Install
 

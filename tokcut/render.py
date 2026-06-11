@@ -36,7 +36,7 @@ def color_args(src: SourceInfo) -> list[str]:
 def build_filtergraph(
     segs: list[SpeedSegment],
     src: SourceInfo,
-    lay: Layout,
+    lay: Layout | None,
     fps: int,
     with_music: bool = False,
     keep_audio: bool = False,
@@ -50,14 +50,19 @@ def build_filtergraph(
     queued the whole decoded video in memory and got ffmpeg OOM-killed on
     1080p60 sources.
 
-    Input layout: inputs 0..n-1 are the segments, n is the caption PNG,
-    n+1 (optional) is the music track. Audio is muted by default (the
-    export is meant to receive a TikTok sound in-app); `keep_audio`
-    retains the original ambient track, `with_music` mixes in music.
+    `lay=None` is landscape mode: the source keeps its native (post-crop)
+    resolution and no caption is overlaid — there is no caption input.
+
+    Input layout: inputs 0..n-1 are the segments, n is the caption PNG
+    (when lay is given), then the music track (optional). Audio is muted
+    by default (the export is meant to receive a TikTok sound in-app);
+    `keep_audio` retains the original ambient track, `with_music` mixes
+    in music.
     """
     want_ambient = src["audio"] and (with_music or keep_audio)
     n = len(segs)
-    cap_idx, mus_idx = n, n + 1
+    cap_idx = n
+    mus_idx = n + 1 if lay is not None else n
 
     fc: list[str] = []
     vlabels: list[str] = []
@@ -78,12 +83,19 @@ def build_filtergraph(
         fc.append(f"{''.join(vlabels)}concat=n={n}:v=1[vc]")
         ambient = None
 
-    vw, vh, vx, vy = lay["vw"], lay["vh"], lay["vx"], lay["vy"]
     crop_f = f"crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]}," if crop else ""
-    fc.append(f"[vc]{crop_f}fps={fps},scale={vw}:{vh}:flags=lanczos,"
-              f"pad={OUT_W}:{OUT_H}:{vx}:{vy}:black[base]")
-    fc.append(f"[base][{cap_idx}:v]overlay={lay['cap_x']}:{lay['cap_y']},"
-              f"format=yuv420p10le[vout]")
+    if lay is None:
+        # landscape: native (post-crop) resolution, even dims, no caption
+        fc.append(f"[vc]{crop_f}fps={fps},"
+                  f"scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,"
+                  f"format=yuv420p10le[vout]")
+    else:
+        vw, vh, vx, vy = lay["vw"], lay["vh"], lay["vx"], lay["vy"]
+        fc.append(f"[vc]{crop_f}fps={fps},scale={vw}:{vh}:flags=lanczos,"
+                  f"pad={OUT_W}:{OUT_H}:{vx}:{vy}:black[base]")
+        fc.append(
+            f"[base][{cap_idx}:v]overlay={lay['cap_x']}:{lay['cap_y']},"
+            f"format=yuv420p10le[vout]")
 
     audio_out = None
     if with_music:
@@ -105,9 +117,9 @@ def build_filtergraph(
 def render(
     path: str,
     segs: list[SpeedSegment],
-    caption_png: str,
+    caption_png: str | None,
     src: SourceInfo,
-    lay: Layout,
+    lay: Layout | None,
     out_path: str,
     crf: int = 18,
     preset: str = "medium",
@@ -123,7 +135,8 @@ def render(
     cmd: list[str] = ["ffmpeg", "-y", "-v", "warning", "-stats"]
     for s, e, _sp in segs:
         cmd += ["-ss", f"{s:.3f}", "-to", f"{e:.3f}", "-i", path]
-    cmd += ["-i", caption_png]
+    if caption_png and lay is not None:
+        cmd += ["-i", caption_png]
     if music_path:
         cmd += ["-stream_loop", "-1", "-i", music_path]
     cmd += ["-filter_complex", fc, "-map", vlabel]

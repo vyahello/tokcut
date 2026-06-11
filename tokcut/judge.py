@@ -183,11 +183,12 @@ Read (view) these frames, sampled in chronological order from the
 FINISHED video:
 {frames}
 
-The on-video caption should read: "{caption}"
+{caption_note}
 The first frame listed IS the video's opening (the cold-open hook).
 
 Check, strictly:
-1. The caption is fully visible, legible, and not covering the action.
+1. Any expected caption is fully visible, legible, and not covering the
+   action (skip this check when there is intentionally no caption).
 2. The opening frame works as a scroll-stopping hook (action, not setup).
 3. The content itself is readable/judgeable at phone size.
 4. The final frame ends on something worth seeing (not a desktop/cutoff).
@@ -212,8 +213,12 @@ def review_output(video: str, duration: float, caption: str) -> dict:
         times = [min(0.4, duration / 10)] + spread_times(
             duration, n=4, margin=0.2)
         frames = extract_frames(video, times, tmp)
+        caption_note = (
+            f'The on-video caption should read: "{caption}"' if caption
+            else "There is intentionally NO on-video caption (landscape "
+                 "export — the creator overlays their own).")
         prompt = REVIEW_PROMPT.format(
-            frames="\n".join(frames), caption=caption)
+            frames="\n".join(frames), caption_note=caption_note)
         reply = parse_json_obj(run_claude(prompt))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

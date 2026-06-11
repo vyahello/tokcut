@@ -233,3 +233,31 @@ def test_auto_target_never_squeezes_action():
     t = A.auto_target(runs)
     assert t is not None
     assert t >= 50.0 * 1.05 - 1e-9
+
+
+# ----------------------------------------------------------- edit_window
+
+def test_edit_window_short_clip_untouched():
+    assert A.edit_window(15.0, landscape=True) == (0.0, 15.0)
+    assert A.edit_window(15.0, landscape=False) == (0.0, 15.0)
+
+
+def test_edit_window_landscape_trims_obs_edges():
+    head, tail = A.edit_window(60.0, landscape=True)
+    assert head == A.OBS_HEAD
+    assert tail == 60.0 - A.OBS_TAIL
+
+
+def test_edit_window_portrait_keeps_head():
+    head, tail = A.edit_window(60.0, landscape=False)
+    assert head == 0.0
+    assert tail == 58.0
+
+
+def test_to_segments_drops_runs_past_duration():
+    import numpy as np
+    # 30 lag samples then 6 action samples; window ends mid-lag at 4.5s
+    tiers = np.array([1] * 30 + [2] * 6, dtype=int)
+    segs = A.to_segments(tiers, sample_fps=6, duration=4.5)
+    assert all(e > s for s, e, _t in segs)
+    assert segs[-1][1] == pytest.approx(4.5)

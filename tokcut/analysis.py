@@ -125,9 +125,13 @@ def to_segments(
     if len(merged) > 1 and merged[0][1] - merged[0][0] < MIN_SEG_SEC:
         merged[1][0] = merged[0][0]
         merged.pop(0)
-    if duration is not None and merged:
-        # sampling rounds the tail up past the real end of the file
-        merged[-1][1] = min(merged[-1][1], duration)
+    if duration is not None:
+        # sampling rounds the tail up past the real end of the window;
+        # drop runs that start beyond it entirely, then clamp the last
+        while merged and merged[-1][0] >= duration:
+            merged.pop()
+        if merged:
+            merged[-1][1] = min(merged[-1][1], duration)
     return merged
 
 
@@ -274,6 +278,27 @@ def assign_speeds(
         speeds = sp
     out = [(s, e, speeds[int(t)]) for s, e, t in segs]
     return out, out_dur(speeds)
+
+
+# Recording-tool edges: laptop screen recordings (OBS & friends) tend to
+# open on the recorder UI and close on reaching for the stop button, so
+# landscape sources lose a harder head/tail than phone clips.
+OBS_HEAD = 1.5
+OBS_TAIL = 3.0
+
+
+def edit_window(duration: float, landscape: bool) -> tuple[float, float]:
+    """Usable (head, tail) window of the source in seconds.
+
+    Short clips are kept whole. Longer ones always lose the last beat
+    (the stop-the-recording shuffle); landscape screen recordings also
+    lose a head/tail slice where the capture tool's own UI shows up.
+    """
+    if duration <= 20.0:
+        return 0.0, duration
+    if landscape:
+        return OBS_HEAD, duration - OBS_TAIL
+    return 0.0, duration - 2.0
 
 
 # TikTok's main ranking signal is completion rate, so shorter wins —

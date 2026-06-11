@@ -73,3 +73,35 @@ def test_filtergraph_music_no_audio_source_uses_music_only():
     fc, v, a = R.build_filtergraph(segs, src, LAY, 60, with_music=True)
     assert a == "[aout]"
     assert "[2:a]volume=0.8[aout]" in fc
+
+
+def test_filtergraph_landscape_no_caption():
+    # lay=None: native resolution, no pad/overlay, no caption input
+    segs = [(0, 5, 1.0), (5, 10, 2.0)]
+    fc, v, a = R.build_filtergraph(segs, SRC, None, 60)
+    assert "overlay" not in fc
+    assert "pad=" not in fc
+    assert "scale=trunc(iw/2)*2:trunc(ih/2)*2" in fc
+    assert v == "[vout]"
+
+
+def test_filtergraph_landscape_music_index():
+    # without a caption input, music is input n (right after segments)
+    segs = [(0, 5, 1.0), (5, 10, 2.0)]
+    fc, _v, a = R.build_filtergraph(segs, SRC, None, 60, with_music=True)
+    assert "[2:a]volume" in fc
+    assert a == "[aout]"
+
+
+def test_filtergraph_vertical_music_index_unchanged():
+    # with a caption input at n, music sits at n+1
+    segs = [(0, 5, 1.0), (5, 10, 2.0)]
+    fc, _v, _a = R.build_filtergraph(segs, SRC, LAY, 60, with_music=True)
+    assert "[3:a]volume" in fc
+
+
+def test_filtergraph_landscape_keeps_crop():
+    segs = [(0, 5, 1.0)]
+    fc, _v, _a = R.build_filtergraph(
+        segs, SRC, None, 60, crop=(10, 20, 800, 600))
+    assert "crop=800:600:10:20" in fc

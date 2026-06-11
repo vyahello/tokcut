@@ -18,6 +18,12 @@ SCALE: dict[str, list[float]] = {
     "phonk": [49.00, 58.27, 65.41, 73.42, 87.31],
 }
 
+# each style's natural tempo — phonk lives much faster than synthwave
+STYLE_BPM: dict[str, int] = {
+    "synthwave": 84,
+    "phonk": 132,
+}
+
 
 def _adsr(n: int, attack: float = 0.01, release: float = 0.1) -> np.ndarray:
     env = np.ones(n)
@@ -50,6 +56,28 @@ def _kick(n: int) -> np.ndarray:
     return body * np.exp(-t * 9)
 
 
+def _hat(n: int, rng: np.random.Generator) -> np.ndarray:
+    """Short high-passed noise tick."""
+    noise = rng.standard_normal(n)
+    hp = np.diff(noise, prepend=0.0)  # crude one-zero highpass
+    return hp * np.exp(-np.arange(n) / SR * 80)
+
+
+def _snare(n: int, rng: np.random.Generator) -> np.ndarray:
+    t = np.arange(n) / SR
+    noise = np.diff(rng.standard_normal(n), prepend=0.0)
+    tone = np.sin(2 * np.pi * 180 * t)
+    return (0.8 * noise + 0.5 * tone) * np.exp(-t * 18)
+
+
+def _cowbell(freq: float, n: int) -> np.ndarray:
+    """Two detuned square partials — the Memphis phonk cowbell."""
+    t = np.arange(n) / SR
+    a = np.sign(np.sin(2 * np.pi * freq * t))
+    b = np.sign(np.sin(2 * np.pi * freq * 1.48 * t))
+    return (0.6 * a + 0.4 * b) * np.exp(-t * 14)
+
+
 def _lowpass(sig: np.ndarray, cutoff: float = 2200) -> np.ndarray:
     """One-pole low-pass for warmth."""
     rc = 1.0 / (2 * np.pi * cutoff)
@@ -63,15 +91,27 @@ def _lowpass(sig: np.ndarray, cutoff: float = 2200) -> np.ndarray:
 
 
 def generate(
-    duration: float, bpm: int = 84, style: str = "synthwave", seed: int = 0
+    duration: float, bpm: int | None = None, style: str = "synthwave",
+    seed: int = 0
 ) -> np.ndarray:
-    """Return a mono float32 track of `duration` seconds in [-1, 1]."""
+    """Return a mono float32 track of `duration` seconds in [-1, 1].
+
+    `bpm=None` uses the style's natural tempo (STYLE_BPM).
+    """
+    bpm = bpm or STYLE_BPM.get(style, 84)
     rng = np.random.default_rng(seed)
     n = int(duration * SR)
     track = np.zeros(n)
     notes = SCALE.get(style, SCALE["synthwave"])
     beat = 60.0 / bpm
     bar = beat * 4
+
+    def hit(sample: np.ndarray, at: float, vol: float) -> None:
+        s = int(at * SR)
+        if s >= n:
+            return
+        end = min(s + len(sample), n)
+        track[s:end] += vol * sample[:end - s]
 
     # --- bass + pad on a 4-bar minor progression ---
     prog = [0, 0, 3, 4]  # scale-degree indices
@@ -92,29 +132,52 @@ def generate(
         t += bar
         bar_i += 1
 
-    # --- kick on every beat ---
-    kn = int(0.25 * SR)
-    k = _kick(kn)
-    bt = 0.0
-    while bt < duration:
-        s = int(bt * SR)
-        end = min(s + kn, n)
-        track[s:end] += 0.55 * k[:end - s]
-        bt += beat
+    # --- rhythm section ---
+    k = _kick(int(0.25 * SR))
+    if style == "phonk":
+        # bouncy trap-style kick, snare backbeat, driving 8th hats with
+        # the occasional 16th roll, and the Memphis cowbell on the lead
+        sn = _snare(int(0.20 * SR), rng)
+        bar_t = 0.0
+        while bar_t < duration:
+            for off in (0.0, 1.5, 2.0, 3.5):
+                hit(k, bar_t + off * beat, 0.60)
+            for off in (1.0, 3.0):
+                hit(sn, bar_t + off * beat, 0.35)
+            hh = 0.0
+            while hh < 4.0:
+                accent = 0.09 if hh % 1.0 == 0.0 else 0.055
+                hit(_hat(int(0.04 * SR), rng), bar_t + hh * beat, accent)
+                # sprinkle a 16th-note roll now and then
+                step = 0.25 if rng.random() < 0.12 else 0.5
+                hh += step
+            bar_t += bar
+        # cowbell lead from the second bar on
+        cn = int(0.3 * SR)
+        cb_t = bar
+        while cb_t < duration:
+            if rng.random() < 0.65:
+                note = notes[rng.integers(0, len(notes))] * 8
+                hit(_cowbell(note, cn), cb_t, 0.13)
+            cb_t += beat / 2
+    else:
+        # synthwave: four-on-the-floor kick + sparse arp shimmer
+        bt = 0.0
+        while bt < duration:
+            hit(k, bt, 0.55)
+            bt += beat
+        an = int(beat / 2 * SR)
+        at = bar  # start after first bar
+        while at < duration:
+            if rng.random() < 0.6:
+                note = notes[rng.integers(0, len(notes))] * 4
+                end = min(int(at * SR) + an, n)
+                seg_n = end - int(at * SR)
+                lead = _saw(note, seg_n) * _adsr(seg_n, 0.005, 0.15)
+                hit(lead, at, 0.07)
+            at += beat / 2
 
-    # --- sparse arp shimmer (phonk/synthwave lead) ---
-    an = int(beat / 2 * SR)
-    at = bar  # start after first bar
-    while at < duration:
-        if rng.random() < 0.6:
-            note = notes[rng.integers(0, len(notes))] * 4
-            s = int(at * SR)
-            end = min(s + an, n)
-            lead = _saw(note, end - s) * _adsr(end - s, 0.005, 0.15)
-            track[s:end] += 0.07 * lead
-        at += beat / 2
-
-    track = _lowpass(track, 2400)
+    track = _lowpass(track, 3800 if style == "phonk" else 2400)
     # normalize and soft-clip
     peak = np.max(np.abs(track)) or 1.0
     track = np.tanh(track / peak * 1.1)

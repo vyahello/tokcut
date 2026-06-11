@@ -83,12 +83,18 @@ edited clip ready to post (see `docs/IDEAS.md`).
 - **Color tags must match the source** (`render.color_args`) — HLG sources
   encoded without `arib-std-b67` look washed out, and SDR sources tagged
   as HLG look washed out too. Never hardcode either direction.
-- Output stays **1080x1920, ≥30fps (keep 60 if source is 60), 10-bit HEVC**
-  — quality is a hard requirement.
-- One caption per video, persistent for the entire duration. Make it
-  specific about what the viewer is watching, e.g. "How I set this up ⚡".
-  Run it past `check_caption` — sensational/policy-sensitive wording can
-  get the post flagged/shadowbanned.
+- **Vertical sources** export **1080x1920, ≥30fps (keep 60 if source is
+  60), 10-bit HEVC** — quality is a hard requirement. **Landscape sources
+  (w > h, e.g. OBS screen recordings) stay native resolution** — same
+  cuts/speeds/hook/crop/music, but NO vertical canvas and NO caption
+  (a boxed landscape video can't go fullscreen in TikTok; the creator
+  overlays their own caption). Landscape also hard-trims OBS edges
+  (`analysis.edit_window`: head 1.5s, tail 3.0s).
+- One caption per video (vertical only), persistent for the entire
+  duration. Make it specific about what the viewer is watching, e.g.
+  "How I set this up ⚡". Run it past `check_caption` —
+  sensational/policy-sensitive wording can get the post
+  flagged/shadowbanned.
 - Audio is **muted by default** — the export has no audio stream so a
   trending TikTok sound is added in-app (ranks better, no copyright mute).
   `--keep-audio` retains original ambient; `--music` bakes in the

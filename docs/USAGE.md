@@ -16,7 +16,7 @@ Output lands next to the input as `YOUR_CLIP_tokcut.mp4` unless you pass
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `-c / --caption` | required | Persistent caption. Emoji supported (⚡🔥🧪💻…). Auto-balanced onto two lines. |
+| `-c / --caption` | — | Persistent caption (required for vertical sources). Emoji supported (⚡🔥🧪💻…). Auto-balanced onto two lines. **Landscape sources never get a caption** — see below. |
 | `-o / --output` | `<input>_tokcut.mp4` | Output path. |
 | `--target` | `auto` | Output length. `auto` (default) solves a TikTok-friendly length: natural pacing ≤35s is kept, longer compresses toward the ~30s completion-rate sweet spot — floored by the real-time action, which is never sped up. A number solves for ≈ N seconds; `none` keeps base tier speeds (dead 3.2x, lag 1.7x, action 1x). |
 | `--style` | `purple` | Caption look: `purple` (purple bold-italic on white — the house style), `yellow` (black on yellow), `black` (white on black). |
@@ -26,10 +26,24 @@ Output lands next to the input as `YOUR_CLIP_tokcut.mp4` unless you pass
 | `--keep-audio` | off | Keep the original ambient audio. **By default the export is muted** (no audio track) so you add a TikTok sound in-app. |
 | `--music [FILE]` | off | Bake in music (implies sound). Bare flag synthesizes a royalty-free track; pass a path to use your own audio. For off-platform posts. |
 | `--music-style` | synthwave | `synthwave` or `phonk` (the darker, heavier one). |
-| `--music-bpm N` | 84 | Tempo of the synthesized track. |
+| `--music-bpm N` | style default | Tempo of the synthesized track — synthwave 84, phonk 132 unless overridden. |
 | `--crf N` | 18 | x265 quality (lower = better/bigger). 18 is visually lossless for screen content. |
 | `--preset P` | medium | x265 preset. Use `fast` if you're in a hurry, `slow` for max quality. |
 | `--dry-run` | off | Print the edit decision list (segments + speeds) and exit — no encode. |
+
+## Landscape sources (laptop screen recordings)
+
+A landscape source (w > h — OBS captures, screen recordings) is **not**
+boxed into a 1080x1920 canvas: a small video floating on a vertical
+canvas can't go fullscreen in TikTok. Instead it keeps its native
+(post-crop) resolution and gets the same treatment otherwise — cuts,
+speed-ups, hook, auto-zoom into the action, optional music with
+beat-aligned cuts. Differences:
+
+- **No caption is rendered** (there's no spare canvas for one) — overlay
+  your own when posting. `-c` is not required.
+- **Recorder-UI edges are hard-trimmed**: the first 1.5s and last 3.0s
+  (where OBS & friends show their own windows) never make the cut.
 
 ## Recommended workflow
 

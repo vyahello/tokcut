@@ -13,6 +13,9 @@ go through (the cloud API caps at 50 MB).
 1. You send a video **as a file**. If you add a message caption, that
    exact text is used on-video. If not, **Claude watches sampled frames
    and writes the caption itself** (subject + caption are messaged to you).
+   **Landscape clips** (laptop/OBS recordings) skip captioning entirely:
+   they keep their native resolution so they can go fullscreen in TikTok
+   — cuts/speed-ups/edge-trims only, you overlay your own caption.
 2. The caption passes the eligibility check; warnings are forwarded.
 3. The render queues (one at a time — parallel encodes can OOM the box)
    and a status message live-updates with the edit plan and progress.
