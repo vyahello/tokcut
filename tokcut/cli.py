@@ -12,6 +12,7 @@ import numpy as np
 
 from . import __version__
 from .analysis import (
+    SCREEN_ACTION_MAX,
     assign_speeds,
     auto_target,
     beat_align,
@@ -25,6 +26,7 @@ from .analysis import (
     smooth,
     to_segments,
     trim_dead_ends,
+    window_crop,
 )
 from .caption import DEFAULT_STYLE, STYLES, check_caption, make_caption
 from .layout import compute_layout
@@ -121,14 +123,17 @@ def plan(
         to_segments(classify(scores), duration=dur_eff))
     if head:
         runs = [[max(s, head), e, t] for s, e, t in runs if e > head]
+    # screen-recording action stays followable at a mild speed-up;
+    # camera action is never accelerated
+    max_action = SCREEN_ACTION_MAX if is_landscape(src) else 1.0
     if target == "auto":
-        target = auto_target(runs)
+        target = auto_target(runs, max_action)
     target = cast("float | None", target)
 
     hook_win = pick_hook(scores, dur_eff) if hook else None
     solve_target = (target - (hook_win[1] - hook_win[0])
                     if target and hook_win else target)
-    segs, est = assign_speeds(runs, solve_target)
+    segs, est = assign_speeds(runs, solve_target, max_action)
     if hook_win:
         segs = [(hook_win[0], hook_win[1], 1.0)] + segs
         est += hook_win[1] - hook_win[0]
@@ -175,10 +180,13 @@ def edit(
            f"@ {src['fps']:.0f}fps  "
            f"({src.get('transfer') or 'unknown'} transfer)")
 
-    # landscape = screen-recording content: never let the zoom slice
-    # through static text/UI (camera footage keeps the plain motion box)
-    crop = (content_crop(frames, src, protect_text=landscape)
-            if crop_enabled else None)
+    # landscape = screen-recording content: crop to the window hosting
+    # the action (desktop chrome falls away, text never sliced); camera
+    # footage keeps the plain motion box
+    crop = None
+    if crop_enabled:
+        crop = (window_crop(frames, src) if landscape
+                else content_crop(frames, src))
     if crop:
         notify(f"crop: zoom into {crop[2]}x{crop[3]} "
                f"at ({crop[0]},{crop[1]})")

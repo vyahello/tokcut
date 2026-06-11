@@ -275,3 +275,63 @@ def test_content_crop_never_slices_static_text():
                           protect_text=True)
     # text spans the whole frame -> no seam -> no crop at all
     assert crop is None
+
+
+# ----------------------------------------------------------- window_crop
+
+def _screen_frames():
+    """Synthetic desktop: textured bright margins, dark window inside."""
+    rng = np.random.default_rng(11)
+    base = rng.uniform(120, 200, (68, 120))   # busy wallpaper
+    base[:, 12:108] = 40.0                    # the app window
+    frames = np.repeat(base[None, :, :], 40, axis=0)
+    frames[:, 30:50, 40:80] += rng.normal(0, 25, (40, 20, 40))  # action
+    return frames.astype(np.float32)
+
+
+def test_window_crop_cuts_desktop_margins():
+    src = {"w": 1920, "h": 1080, "fps": 60, "duration": 60.0,
+           "audio": False}
+    crop = A.window_crop(_screen_frames(), src)
+    assert crop is not None
+    x, y, w, h = crop
+    assert x >= 100          # left margin (12/120 of 1920 = 192) shaved
+    assert x + w <= 1850     # right margin shaved
+    assert w >= 1500         # but the whole window survives
+
+
+def test_window_crop_fullscreen_window_no_crop():
+    # window fills the frame -> nothing to shave
+    rng = np.random.default_rng(3)
+    base = np.full((68, 120), 40.0)
+    frames = np.repeat(base[None, :, :], 40, axis=0)
+    frames[:, 30:50, 40:80] += rng.normal(0, 25, (40, 20, 40))
+    src = {"w": 1920, "h": 1080, "fps": 60, "duration": 60.0,
+           "audio": False}
+    assert A.window_crop(frames.astype(np.float32), src) is None
+
+
+# ------------------------------------------------- action speed-up cap
+
+def test_assign_speeds_action_stays_realtime_by_default():
+    runs = [[0.0, 40.0, 2], [40.0, 60.0, 0]]
+    segs, est = A.assign_speeds(runs, target=20.0)
+    action_speeds = [v for (s, e, v), r in zip(segs, runs) if r[2] == 2]
+    assert action_speeds == [1.0]
+
+
+def test_assign_speeds_screen_action_speedup_capped():
+    runs = [[0.0, 40.0, 2], [40.0, 60.0, 0]]
+    segs, est = A.assign_speeds(runs, target=20.0,
+                                max_action_speed=A.SCREEN_ACTION_MAX)
+    action_speed = segs[0][2]
+    assert 1.0 < action_speed <= A.SCREEN_ACTION_MAX
+
+
+def test_auto_target_screen_floor_divided_by_action_cap():
+    runs = [[0.0, 50.0, 2], [50.0, 150.0, 0]]
+    plain = A.auto_target(runs)
+    screen = A.auto_target(runs, max_action_speed=A.SCREEN_ACTION_MAX)
+    assert plain == 50.0 * 1.05
+    assert screen == max(A.AUTO_SWEET, 50.0 * 1.05 / A.SCREEN_ACTION_MAX)
+    assert screen < plain

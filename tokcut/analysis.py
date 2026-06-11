@@ -265,14 +265,30 @@ def content_crop(
         r0 = _expand_to_seam(row_det, r0, -1)
         r1 = _expand_to_seam(row_det, r1, +1)
 
-    ah, aw = motion.shape
+    return _finalize_crop(c0, c1, r0, r1, motion.shape, src,
+                          min_keep, pad_px)
+
+
+def _finalize_crop(
+    c0: int, c1: int, r0: int, r1: int,
+    shape: tuple[int, ...], src: SourceInfo,
+    min_keep: float, pad_px: int,
+    max_keep_frac: float = 0.90,
+) -> tuple[int, int, int, int] | None:
+    """Scale analysis-grid bounds to padded, clamped source pixels.
+
+    Enforces the never-zoom-absurdly-far floor (min_keep per axis) and
+    the minimum-gain rule: a crop keeping more than max_keep_frac of the
+    frame isn't worth re-framing for (an honest no-crop beats a silly
+    one).
+    """
+    ah, aw = shape
     sx, sy = src["w"] / aw, src["h"] / ah
     x0 = max(0, int(c0 * sx) - pad_px)
     x1 = min(src["w"], int((c1 + 1) * sx) + pad_px)
     y0 = max(0, int(r0 * sy) - pad_px)
     y1 = min(src["h"], int((r1 + 1) * sy) + pad_px)
 
-    # never zoom in absurdly far — keep at least min_keep of each axis
     min_w, min_h = int(src["w"] * min_keep), int(src["h"] * min_keep)
     if x1 - x0 < min_w:
         cx = (x0 + x1) // 2
@@ -285,16 +301,94 @@ def content_crop(
 
     w = (x1 - x0) // 2 * 2
     h = (y1 - y0) // 2 * 2
-    if w * h >= 0.90 * src["w"] * src["h"]:
+    if w * h >= max_keep_frac * src["w"] * src["h"]:
         return None  # not enough gain to be worth a crop
     return x0, y0, w, h
 
 
+def _run_with_gaps(good: np.ndarray, center: int,
+                   max_gap: int) -> tuple[int, int]:
+    """Contiguous run of True around `center`, tolerating small gaps.
+
+    Window content isn't perfectly uniform (title bars, separators), so
+    up to max_gap consecutive False entries are stepped over.
+    """
+    lo = hi = center
+    gap, i = 0, center
+    while i - 1 >= 0:
+        i -= 1
+        if good[i]:
+            lo, gap = i, 0
+        else:
+            gap += 1
+            if gap > max_gap:
+                break
+    gap, i = 0, center
+    while i + 1 < len(good):
+        i += 1
+        if good[i]:
+            hi, gap = i, 0
+        else:
+            gap += 1
+            if gap > max_gap:
+                break
+    return lo, hi
+
+
+def window_crop(
+    frames: np.ndarray,
+    src: SourceInfo,
+    min_keep: float = 0.55,
+    pad_px: int = 8,
+    bg_tol: float = 10.0,
+    frac: float = 0.65,
+) -> tuple[int, int, int, int] | None:
+    """Crop a screen recording to the window hosting the action.
+
+    Terminal demos play out in one application window surrounded by
+    desktop chrome (wallpaper strips, docks, taskbars). Motion finds the
+    hot spot; the window around it is the contiguous block of rows and
+    columns dominated by the window's own background color (sampled
+    around the motion region). Wallpaper and bars read as foreign colors
+    and fall away — including their static text, which a motion-only box
+    would slice. Returns (x, y, w, h) in source pixels, or None when the
+    window effectively fills the frame.
+    """
+    f = frames.astype(np.float32)
+    motion = np.abs(np.diff(f, axis=0)).mean(axis=0)
+    if float(motion.sum()) <= 0:
+        return None
+    row_m, col_m = motion.sum(axis=1), motion.sum(axis=0)
+    mr0, mr1 = _mass_bounds(row_m, 0.8)
+    mc0, mc1 = _mass_bounds(col_m, 0.8)
+
+    mean_f = f.mean(axis=0)
+    bg = float(np.median(mean_f[mr0:mr1 + 1, mc0:mc1 + 1]))
+    is_bg = np.abs(mean_f - bg) < bg_tol
+
+    cy = int((row_m * np.arange(len(row_m))).sum() / row_m.sum())
+    cx = int((col_m * np.arange(len(col_m))).sum() / col_m.sum())
+    ah, aw = mean_f.shape
+    r0, r1 = _run_with_gaps(is_bg.mean(axis=1) > frac, cy,
+                            max_gap=max(1, ah // 24))
+    c0, c1 = _run_with_gaps(is_bg.mean(axis=0) > frac, cx,
+                            max_gap=max(1, aw // 24))
+    # shaving even narrow desktop strips is worth it — relax the
+    # minimum-gain rule relative to the motion crop
+    return _finalize_crop(c0, c1, r0, r1, mean_f.shape, src,
+                          min_keep, pad_px, max_keep_frac=0.97)
+
+
 def assign_speeds(
-    segs: list[Segment], target: float | None = None
+    segs: list[Segment], target: float | None = None,
+    max_action_speed: float = 1.0,
 ) -> tuple[list[SpeedSegment], float]:
     """Map tiers to speeds; optionally solve for a target duration.
 
+    `max_action_speed` lets the action tier rise above real-time when
+    the fast tiers alone can't reach the target — screen-recording
+    content (typing, scrolling output) stays perfectly followable at a
+    mild speed-up, unlike camera footage, which keeps 1.0x.
     Returns ([(start, end, speed)], estimated_output_duration).
     """
     speeds = {0: SPEED_DEAD, 1: SPEED_LAG, 2: SPEED_ACTION}
@@ -309,7 +403,8 @@ def assign_speeds(
             m = (lo_m + hi_m) / 2
             sp = {0: min(MAX_SPEED, max(1.0, SPEED_DEAD * m)),
                   1: min(MAX_SPEED, max(1.0, SPEED_LAG * m)),
-                  2: SPEED_ACTION}
+                  2: min(max_action_speed,
+                         max(1.0, SPEED_ACTION * m))}
             if out_dur(sp) > target:
                 lo_m = m
             else:
@@ -345,21 +440,26 @@ def edit_window(duration: float, landscape: bool) -> tuple[float, float]:
 # low end, but never compress real-time action to get there.
 AUTO_SWEET = 30.0  # output length to aim for when compressing
 AUTO_MAX = 35.0    # natural pacing up to this long is left alone
+# screen-recording action (typing, scrolling output) stays followable
+# at a mild speed-up; camera action keeps strict real time
+SCREEN_ACTION_MAX = 1.5
 
 
-def auto_target(runs: list[Segment]) -> float | None:
+def auto_target(runs: list[Segment],
+                max_action_speed: float = 1.0) -> float | None:
     """Pick a TikTok-friendly output length, or None to keep base speeds.
 
     If the natural pacing (base tier speeds) already lands within
     AUTO_MAX, no solving is needed. Otherwise compress toward AUTO_SWEET
-    — floored by the 1x action time, which is never sped up: a clip
-    whose genuine action runs 45s gets ~45s, not a butchered 30.
+    — floored by the action time at `max_action_speed` (1.0 for camera
+    footage: real action is never sped up; SCREEN_ACTION_MAX for screen
+    recordings, where a mild speed-up stays followable).
     """
     _, natural = assign_speeds(runs)
     if natural <= AUTO_MAX:
         return None
     action = sum(e - s for s, e, t in runs if int(t) == 2)
-    return max(AUTO_SWEET, action * 1.05)
+    return max(AUTO_SWEET, action * 1.05 / max_action_speed)
 
 
 MIN_SEG_SRC = 0.3  # never align a segment below this many source-seconds

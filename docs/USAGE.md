@@ -44,6 +44,13 @@ beat-aligned cuts. Differences:
   your own when posting. `-c` is not required.
 - **Recorder-UI edges are hard-trimmed**: the first 1.5s and last 3.0s
   (where OBS & friends show their own windows) never make the cut.
+- **The crop targets the window, not just the motion**: desktop strips,
+  docks and wallpaper around the app window fall away, while the
+  window's own static text is never sliced (a motion-only box would cut
+  still terminal text mid-character).
+- **Action may run up to 1.5x** when needed to hit the auto length —
+  typing and scrolling output stay followable sped up; camera footage
+  keeps action at strict real time.
 
 ## Recommended workflow
 

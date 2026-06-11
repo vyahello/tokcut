@@ -89,7 +89,12 @@ edited clip ready to post (see `docs/IDEAS.md`).
   cuts/speeds/hook/crop/music, but NO vertical canvas and NO caption
   (a boxed landscape video can't go fullscreen in TikTok; the creator
   overlays their own caption). Landscape also hard-trims OBS edges
-  (`analysis.edit_window`: head 1.5s, tail 3.0s).
+  (`analysis.edit_window`: head 1.5s, tail 3.0s), crops to the **window
+  hosting the action** (`analysis.window_crop`: desktop strips/docks
+  fall away, on-screen text is never sliced — motion-only boxes cut
+  static terminal text mid-character), and may speed the action tier up
+  to **1.5x** (`SCREEN_ACTION_MAX`) to hit the auto length — screen
+  content stays followable; camera action stays strictly 1.0x.
 - One caption per video (vertical only), persistent for the entire
   duration. Make it specific about what the viewer is watching, e.g.
   "How I set this up ⚡". Run it past `check_caption` —
