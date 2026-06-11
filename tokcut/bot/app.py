@@ -8,6 +8,7 @@ redo feedback into setting changes.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 
@@ -188,6 +189,27 @@ async def _claude_caption(msg, dest: str,
         return "", ""
 
 
+@contextlib.asynccontextmanager
+async def _render_guard(workdir: str, lock: asyncio.Lock):
+    """Hold the render lock (sequential renders — parallel x265 OOMs)
+    with a `.rendering` marker file for the CI deploy drain: a service
+    restart mid-encode kills the take, so deploys wait for the marker
+    to disappear before restarting (see ci.yml)."""
+    marker = os.path.join(workdir, ".rendering")
+    try:
+        with open(marker, "w") as mf:
+            mf.write(str(os.getpid()))
+    except OSError:
+        marker = ""
+    try:
+        async with lock:
+            yield
+    finally:
+        if marker:
+            with contextlib.suppress(OSError):
+                os.remove(marker)
+
+
 async def _render_and_deliver(msg, context: ContextTypes.DEFAULT_TYPE,
                               session: EditSession) -> None:
     """Render the session's current state and deliver with the keyboard."""
@@ -197,7 +219,7 @@ async def _render_and_deliver(msg, context: ContextTypes.DEFAULT_TYPE,
         await msg.reply_text("🚦 One render at a time — you're next in "
                              "line.")
 
-    async with lock:  # renders are sequential: parallel x265 OOMs the box
+    async with _render_guard(cfg.workdir, lock):
         session.revision += 1
         rev = session.revision
         tag = (f": “{session.caption}”" if session.caption
@@ -552,6 +574,10 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
     cfg = load_config()
+    # a crash can leave the deploy-drain marker behind; no render can be
+    # running at startup, so clear it
+    with contextlib.suppress(OSError):
+        os.remove(os.path.join(cfg.workdir, ".rendering"))
     app = build_application(cfg)
     api = (f"local Bot API ({cfg.bot_api_base_url}, ≤2 GB)"
            if cfg.local_mode else "cloud Bot API (≤50 MB)")
