@@ -274,3 +274,48 @@ def assign_speeds(
         speeds = sp
     out = [(s, e, speeds[int(t)]) for s, e, t in segs]
     return out, out_dur(speeds)
+
+
+MIN_SEG_SRC = 0.3  # never align a segment below this many source-seconds
+
+
+def beat_align(
+    segs: list[SpeedSegment], bpm: float, duration: float
+) -> list[SpeedSegment]:
+    """Nudge cut points so they land on the music's beat grid.
+
+    The synthesized track runs at a fixed bpm with a beat at t=0, so the
+    beats sit at exact multiples of 60/bpm in *output* time — no beat
+    detection needed. Each segment's source end is nudged (and the next
+    segment's start follows, when contiguous) so the cut falls on the
+    nearest beat; the final cut snaps to a beat the source can still
+    reach, so the video ends on one too. Boundaries that would squeeze a
+    segment under MIN_SEG_SRC source-seconds are left where they are.
+    """
+    beat = 60.0 / bpm
+    out: list[SpeedSegment] = []
+    t_out = 0.0  # output time at the last aligned boundary
+    i = 0
+    while i < len(segs):
+        s, e, v = segs[i]
+        t_cut = t_out + (e - s) / v
+        # nearest beat, but never one that empties this segment
+        target = max(round(t_cut / beat), 1) * beat
+        if i == len(segs) - 1:
+            # final cut: the source must still reach it
+            room = duration - s
+            while (target - t_out) * v > room and target - beat > t_out:
+                target -= beat
+        new_e = s + (target - t_out) * v
+        next_contig = (i + 1 < len(segs) and segs[i + 1][0] == segs[i][1])
+        if new_e - s < MIN_SEG_SRC or new_e > duration or (
+                next_contig and segs[i + 1][1] - new_e < MIN_SEG_SRC):
+            new_e, target = e, t_cut  # can't move this cut — leave it
+        out.append((s, new_e, v))
+        if next_contig:
+            nxt = segs[i + 1]
+            segs = [*segs[:i + 1], (new_e, nxt[1], nxt[2]),
+                    *segs[i + 2:]]
+        t_out = target
+        i += 1
+    return out

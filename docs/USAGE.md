@@ -56,7 +56,10 @@ Two opt-outs when you want sound baked in:
 - **`--music`** — bakes in a synthesized royalty-free track (synthwave /
   phonk, zero copyright risk), ducked under the original audio. Use this
   for posts you'll share **off** TikTok (Reels, Shorts, your site), where
-  there's no in-app sound library.
+  there's no in-app sound library. Because the track is generated at a
+  known bpm, the cuts are **snapped onto its beat grid** — every segment
+  change lands on a beat and the video ends on one. (A music *file* you
+  pass yourself plays as-is, no alignment — its bpm is unknown.)
 
 ## Picking a target duration
 

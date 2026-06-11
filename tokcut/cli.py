@@ -13,6 +13,7 @@ import numpy as np
 from . import __version__
 from .analysis import (
     assign_speeds,
+    beat_align,
     classify,
     content_crop,
     motion_scores,
@@ -138,6 +139,13 @@ def edit(
     if crop:
         notify(f"crop: zoom into {crop[2]}x{crop[3]} "
                f"at ({crop[0]},{crop[1]})")
+
+    if music == "__auto__":
+        # the synthesized track has a known, exact beat grid — snap the
+        # cuts onto it so every segment change lands on a beat
+        segs = beat_align(segs, music_bpm, src["duration"])
+        est = sum((e - s) / v for s, e, v in segs)
+        notify(f"beat-align: cuts snapped to the {music_bpm}bpm grid")
 
     lines = [f"edit plan ({len(segs)} segments, ~{est:.1f}s output):"]
     for i, (s, e, sp) in enumerate(segs):

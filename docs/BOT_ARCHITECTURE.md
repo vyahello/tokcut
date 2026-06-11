@@ -156,4 +156,9 @@ Notes / caveats to keep in mind:
    the up/download cap from 50 MB to 2 GB so full iPhone clips go through.
    Downloads resolve to shared local paths; the bot logs the active
    endpoint at startup. Cloud API stays the default when the var is unset.
-6. (Later) auto-music, beat-aligned cuts.
+6. ✅ **Beat-aligned music cuts** (`analysis.beat_align`) — the
+   synthesized track's beat grid is exact (fixed bpm, beat at t=0), so
+   when music is on, segment boundaries are nudged so every cut lands on
+   a beat in output time, and the video ends on one. Applies in
+   `cli.edit()` whenever `--music` synthesizes the track (CLI and bot);
+   user-supplied music files skip it (unknown bpm).

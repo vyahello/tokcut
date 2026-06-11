@@ -94,7 +94,8 @@ tokcut clip.MOV -c "..." --music ~/tracks/mytrack.mp3
 7. **Audio** — muted by default (silent export for in-app TikTok sound).
    `--keep-audio` retains the original ambient; `--music` bakes in a
    royalty-free synthwave/phonk track synthesized by `tokcut.music` (zero
-   copyright risk).
+   copyright risk) — and since the track's beat grid is known exactly,
+   every cut is **snapped onto the beat** 🥁.
 8. **Render** — one ffmpeg `filter_complex`: per-segment trim/setpts +
    atempo, concat, optional crop, lanczos scale into 1080x1920, caption
    overlay, encode **libx265 main10 crf 18** with color tags matched to
@@ -147,9 +148,9 @@ For full-length clips over Telegram's 50 MB cap, run a local Bot API server
 
 ## 🗺️ Roadmap
 
-🥁 Beat-aligned music cuts and VPS deploy. (Big clips already work — point
-the bot at a local Bot API server, see [`docs/BOT.md`](docs/BOT.md).) See
-[`docs/IDEAS.md`](docs/IDEAS.md) for the content playbook.
+VPS deploy (the CI stage is stubbed and waiting). Big clips already work —
+point the bot at a local Bot API server — and music cuts are beat-aligned.
+See [`docs/IDEAS.md`](docs/IDEAS.md) for the content playbook.
 
 ---
 

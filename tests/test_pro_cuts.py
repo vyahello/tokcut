@@ -156,3 +156,57 @@ def test_to_segments_clamps_to_duration():
     tiers = np.array([2] * 61, dtype=int)  # 61 samples @6fps ≈ 10.17s
     segs = A.to_segments(tiers, sample_fps=6, duration=10.0)
     assert segs[-1][1] == pytest.approx(10.0)
+
+
+# ----------------------------------------------------------- beat_align
+
+def _out_times(segs):
+    """Cumulative output-time cut points for an edit list."""
+    t, times = 0.0, []
+    for s, e, v in segs:
+        t += (e - s) / v
+        times.append(t)
+    return times
+
+
+def test_beat_align_snaps_cuts_to_grid():
+    # bpm=60 -> beat every 1.0s of output time
+    segs = [(0.0, 1.4, 1.0), (1.4, 4.6, 2.0), (4.6, 9.7, 1.0)]
+    aligned = A.beat_align(segs, bpm=60, duration=12.0)
+    for t in _out_times(aligned):
+        assert t % 1.0 == pytest.approx(0.0, abs=1e-6)
+    # contiguity preserved
+    for a, b in zip(aligned, aligned[1:]):
+        assert a[1] == pytest.approx(b[0])
+
+
+def test_beat_align_keeps_speeds_and_order():
+    segs = [(0.0, 2.2, 1.0), (2.2, 8.1, 3.2)]
+    aligned = A.beat_align(segs, bpm=84, duration=10.0)
+    assert [v for _, _, v in aligned] == [1.0, 3.2]
+    assert all(e > s for s, e, _ in aligned)
+
+
+def test_beat_align_never_empties_a_segment():
+    # a segment much shorter than a beat must survive
+    segs = [(0.0, 0.4, 1.0), (0.4, 6.0, 1.0)]
+    aligned = A.beat_align(segs, bpm=30, duration=6.0)  # beat = 2.0s
+    assert all(e - s >= A.MIN_SEG_SRC for s, e, _ in aligned)
+
+
+def test_beat_align_end_stays_within_source():
+    segs = [(0.0, 5.5, 1.0)]
+    aligned = A.beat_align(segs, bpm=60, duration=5.6)
+    s, e, _ = aligned[0]
+    assert e <= 5.6
+    assert _out_times(aligned)[-1] % 1.0 == pytest.approx(0.0, abs=1e-6)
+
+
+def test_beat_align_hook_gap_respected():
+    # hook (8..9.3) is NOT contiguous with the chronological cut (1.5..)
+    segs = [(8.0, 9.3, 1.0), (1.5, 6.0, 1.7)]
+    aligned = A.beat_align(segs, bpm=60, duration=10.0)
+    times = _out_times(aligned)
+    assert times[0] % 1.0 == pytest.approx(0.0, abs=1e-6)
+    # the chronological segment's start must be untouched
+    assert aligned[1][0] == pytest.approx(1.5)

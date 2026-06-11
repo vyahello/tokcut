@@ -62,7 +62,11 @@ edited clip ready to post (see `docs/IDEAS.md`).
    added in-app; `render` emits `-an`). `--keep-audio` retains the original
    ambient track; `--music` (`music.generate`) synthesizes a royalty-free
    synthwave/phonk track and `render` ducks it under the ambient audio with
-   `amix ... normalize=0`.
+   `amix ... normalize=0`. With synthesized music the cuts are
+   **beat-aligned** (`analysis.beat_align`): the track's beat grid is exact
+   (known bpm, beat at t=0), so segment boundaries are nudged to land on
+   beats in output time — no beat detection involved. User-supplied music
+   files skip it (unknown bpm).
 8. **Render** (`render.render`) — one ffmpeg `filter_complex`: per-segment
    trim/setpts + atempo, concat, optional crop, lanczos scale into
    1080x1920, caption overlay, encode **libx265 main10 crf 18** with
