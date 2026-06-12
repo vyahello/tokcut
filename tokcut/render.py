@@ -34,18 +34,20 @@ def color_args(src: SourceInfo) -> list[str]:
 
 
 def look_filter(src: SourceInfo, screen: bool) -> str:
-    """A subtle finishing grade — punchy, never garish.
+    """A finishing grade — punchy, never garish.
 
-    Screen recordings get contrast + saturation and a mild sharpen so
-    UI text stays crisp after the lanczos scale. SDR camera footage
-    gets a touch more pop; HDR (HLG/PQ) is treated gently — its
-    transfer curve already carries the look, heavy eq would break it.
-    All filters are 10-bit safe.
+    Screen recordings are mostly monochrome (terminal text on a dark
+    background), so saturation buys nothing there — the budget goes to
+    contrast, a slight gamma lift that keeps shadows from crushing, and
+    a strong sharpen so UI text pops at phone size. SDR camera footage
+    gets a contrast/saturation lift; HDR (HLG/PQ) is treated gently —
+    its transfer curve already carries the look, heavy eq would break
+    it. All filters are 10-bit safe.
     """
     hdr = src.get("transfer") in ("arib-std-b67", "smpte2084")
     if screen:
-        return ("eq=contrast=1.05:saturation=1.15,"
-                "unsharp=5:5:0.35:5:5:0.0")
+        return ("eq=contrast=1.12:gamma=1.05,"
+                "unsharp=5:5:0.8:5:5:0.0")
     if hdr:
         return "eq=contrast=1.03:saturation=1.08"
     return "eq=contrast=1.06:brightness=0.015:saturation=1.18"

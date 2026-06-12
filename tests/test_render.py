@@ -110,7 +110,10 @@ def test_filtergraph_landscape_keeps_crop():
 def test_look_filter_variants():
     sdr_cam = {"transfer": "bt709"}
     hdr = {"transfer": "arib-std-b67"}
-    assert "unsharp" in R.look_filter(sdr_cam, screen=True)
+    screen = R.look_filter(sdr_cam, screen=True)
+    assert "unsharp" in screen
+    assert "saturation" not in screen  # mono text: saturation buys nothing
+    assert "gamma" in screen           # shadow lift against crushing
     assert "unsharp" not in R.look_filter(hdr, screen=False)
     assert "saturation=1.08" in R.look_filter(hdr, screen=False)
     assert "brightness" in R.look_filter(sdr_cam, screen=False)
