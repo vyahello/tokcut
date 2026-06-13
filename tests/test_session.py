@@ -208,6 +208,60 @@ def test_tweaks_pass_validation():
     from tokcut.bot.session import EditParams, tweak_updates
     p = EditParams(target=15.0)
     for key in ("shorter", "longer", "tighter", "wider", "hook", "crop",
-                "phonk", "synthwave", "nomusic", "style", "newcaption"):
+                "phonk", "synthwave", "faster", "slower", "remix",
+                "nomusic", "style", "newcaption"):
         raw = tweak_updates(key, p)
         assert validate_updates(raw), f"{key} produced nothing valid"
+
+
+# ------------------------------------------------------- music tempo/mix
+
+def test_tweak_faster_slower_sets_bpm_and_enables_music():
+    from tokcut.bot.session import EditParams, default_bpm, tweak_updates
+    p = EditParams()  # music off
+    up = tweak_updates("faster", p)
+    assert up["music"] == "phonk"                  # enabled so it's audible
+    assert up["music_bpm"] > default_bpm("phonk")  # faster than default
+    p2 = EditParams(music_style="synthwave", music_bpm=84)
+    assert tweak_updates("slower", p2)["music_bpm"] < 84
+    assert "music" not in tweak_updates("slower", p2)  # already on
+
+
+def test_tweak_remix_bumps_mix():
+    from tokcut.bot.session import EditParams, tweak_updates
+    assert tweak_updates("remix", EditParams(music_style="phonk")) == {
+        "new_music_mix": True}
+    # off -> also enable
+    assert tweak_updates("remix", EditParams())["music"] == "phonk"
+
+
+def test_validate_music_bpm_clamps():
+    assert validate_updates({"music_bpm": 140})["music_bpm"] == 140
+    assert validate_updates({"music_bpm": 999})["music_bpm"] == 180
+    assert validate_updates({"music_bpm": 10})["music_bpm"] == 60
+    assert validate_updates({"music_bpm": True}) == {}
+    assert validate_updates({"new_music_mix": True}) == {"new_music_mix": True}
+    assert validate_updates({"new_music_mix": False}) == {}
+
+
+def test_apply_music_bpm_and_mix():
+    from tokcut.bot.session import EditParams, EditSession
+    s = EditSession(source="x", file_name="x.mp4", caption="c",
+                    params=EditParams(music_style="phonk"))
+    ch = apply_updates(s, {"music_bpm": 150})
+    assert s.params.music_bpm == 150
+    assert "faster" in ch[0]
+    seed0 = s.params.music_seed
+    apply_updates(s, {"new_music_mix": True})
+    assert s.params.music_seed == seed0 + 1
+
+
+def test_fallback_music_tempo_and_mix():
+    from tokcut.bot.session import EditParams, default_bpm
+    p = EditParams(music_style="phonk", music_bpm=None)
+    assert fallback_updates("make the music faster", p)["music_bpm"] > \
+        default_bpm("phonk")
+    assert fallback_updates("different beat please", p) == {
+        "new_music_mix": True}
+    # plain "faster" without a music word stays out of music territory
+    assert "music_bpm" not in fallback_updates("faster", p)

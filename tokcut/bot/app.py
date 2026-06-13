@@ -61,35 +61,33 @@ VERDICT_KEYBOARD = InlineKeyboardMarkup([[
 
 
 def redo_keyboard(session: EditSession) -> InlineKeyboardMarkup:
-    """Quick-tap tweaks; free text always works as well."""
+    """Quick-tap tweaks; free text always works as well.
+
+    Laid out two buttons per row — three-wide rows get clipped on the
+    right edge on iPhone, so every row holds at most two.
+    """
     p = session.params
-    rows = [
-        [InlineKeyboardButton("⚡ Shorter", callback_data=TWEAK + "shorter"),
-         InlineKeyboardButton("🐢 Longer", callback_data=TWEAK + "longer")],
-        [InlineKeyboardButton("🔎 Tighter", callback_data=TWEAK + "tighter"),
-         InlineKeyboardButton("🔭 Wider", callback_data=TWEAK + "wider")],
-        [InlineKeyboardButton(
-            "🪝 Cold open " + ("off" if p.hook else "on"),
-            callback_data=TWEAK + "hook"),
-         InlineKeyboardButton(
-            "🔍 Zoom " + ("off" if p.crop else "on"),
-            callback_data=TWEAK + "crop"),
-         InlineKeyboardButton(
-            "✨ Look " + ("off" if p.look else "on"),
-            callback_data=TWEAK + "look")],
-        [InlineKeyboardButton("🥁 Phonk", callback_data=TWEAK + "phonk"),
-         InlineKeyboardButton("🎹 Synthwave",
-                              callback_data=TWEAK + "synthwave"),
-         InlineKeyboardButton("🔇 No music",
-                              callback_data=TWEAK + "nomusic")],
+
+    def btn(label: str, key: str) -> InlineKeyboardButton:
+        return InlineKeyboardButton(label, callback_data=TWEAK + key)
+
+    buttons = [
+        btn("⚡ Shorter", "shorter"), btn("🐢 Longer", "longer"),
+        btn("🔎 Tighter", "tighter"), btn("🔭 Wider", "wider"),
+        btn("🪝 Cold open " + ("off" if p.hook else "on"), "hook"),
+        btn("🔍 Zoom " + ("off" if p.crop else "on"), "crop"),
+        btn("✨ Look " + ("off" if p.look else "on"), "look"),
     ]
-    if session.caption:  # vertical exports only — landscape has none
-        rows.append([
-            InlineKeyboardButton("✍️ New caption",
-                                 callback_data=TWEAK + "newcaption"),
-            InlineKeyboardButton("🎨 Next style",
-                                 callback_data=TWEAK + "style"),
-        ])
+    if session.caption:  # vertical exports only — landscape has no caption
+        buttons += [btn("✍️ New caption", "newcaption"),
+                    btn("🎨 Next style", "style")]
+    # music section
+    buttons += [
+        btn("🥁 Phonk", "phonk"), btn("🎹 Synthwave", "synthwave"),
+        btn("🔥 Faster beat", "faster"), btn("🧊 Slower beat", "slower"),
+        btn("🎲 New mix", "remix"), btn("🔇 No music", "nomusic"),
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     return InlineKeyboardMarkup(rows)
 
 
@@ -295,6 +293,8 @@ async def _render_and_deliver(msg, context: ContextTypes.DEFAULT_TYPE,
                 keep_audio=p.keep_audio,
                 music="__auto__" if p.music_style else None,
                 music_style=p.music_style or "synthwave",
+                music_bpm=p.music_bpm,
+                music_seed=p.music_seed,
                 preset=cfg.preset,
                 on_progress=notify)
         except Exception as exc:  # noqa: BLE001 — report, keep bot alive

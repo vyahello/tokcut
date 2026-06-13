@@ -29,6 +29,10 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl rsync ffmpeg fonts-dejavu \
     fonts-noto-color-emoji python3 python3-venv python3-pip acl
+# FluidR3 (~140 MB) is a far better GM soundfont than the tiny default —
+# the music generator auto-prefers it (music.find_soundfont). Best-effort.
+apt-get install -y -qq fluid-soundfont-gm || \
+    echo "  (fluid-soundfont-gm unavailable; using existing soundfont)"
 
 # docker: only install the distro packages when docker is absent —
 # boxes with Docker CE (docker.com) conflict with Ubuntu's docker.io

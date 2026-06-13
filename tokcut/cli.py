@@ -97,6 +97,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--music-bpm", type=int, default=None,
                     help="Tempo of the synthesized track (default: the "
                          "style's own — synthwave 84, phonk 132)")
+    ap.add_argument("--music-seed", type=int, default=0,
+                    help="Composition seed — change it for a different "
+                         "track in the same style (default: 0)")
     ap.add_argument("--crf", type=int, default=18)
     ap.add_argument("--preset", default="medium")
     ap.add_argument("--dry-run", action="store_true",
@@ -164,6 +167,7 @@ def edit(
     music: str | None = None,
     music_style: str = "synthwave",
     music_bpm: int | None = None,
+    music_seed: int = 0,
     crf: int = 18,
     preset: str = "medium",
     dry_run: bool = False,
@@ -257,7 +261,8 @@ def edit(
         if music == "__auto__":
             music_path = os.path.join(tmp, "music.wav")
             write_wav(generate(max(est, 1.0) + 2, bpm=bpm,
-                               style=music_style), music_path)
+                               style=music_style, seed=music_seed),
+                      music_path)
             notify(f"music: synthesized {music_style} @ {bpm}bpm")
         elif music:
             music_path = music
@@ -302,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             music=args.music,
             music_style=args.music_style,
             music_bpm=args.music_bpm,
+            music_seed=args.music_seed,
             crf=args.crf,
             preset=args.preset,
             dry_run=args.dry_run,

@@ -77,11 +77,17 @@ edited clip ready to post (see `docs/IDEAS.md`).
    crackle. The notes are played by **sampled GM instruments** when
    `tinysoundfont` + a `.sf2` are present (choir/strings/piano for
    phonk, polysynth/saw/synth-bass for synthwave, real drum kit;
-   discovery: `TOKCUT_SOUNDFONT`, `/usr/share/sounds/sf2`, `~/.tokcut`)
-   with numpy oscillators as fallback. The master bus runs Spotify's
-   `pedalboard` FX chain (compressor/chorus/reverb/limiter — installed
-   via the `bot` extra) with a lowpass+softclip fallback. With
-   synthesized music the cuts are
+   discovery: `TOKCUT_SOUNDFONT`, then best-quality first —
+   FluidR3 > GeneralUser > … > TimGM6mb — under `/usr/share/sounds/sf2`,
+   `/usr/share/soundfonts`, `~/.tokcut`) with numpy oscillators as
+   fallback. A noise riser sweeps into the first downbeat for energy.
+   The master bus runs Spotify's `pedalboard` FX chain (compressor /
+   distortion / treble shelf / gain into a hard limiter — loud and
+   bright for phone speakers; TikTok re-normalizes on upload) with a
+   lowpass+softclip fallback. Tempo and the composition seed are
+   adjustable (`--music-bpm` / `--music-seed`; bot buttons 🔥/🧊/🎲 and
+   "faster/slower/different beat" free text). With synthesized music the
+   cuts are
    **beat-aligned** (`analysis.beat_align`): the track's beat grid is exact
    (known bpm, beat at t=0), so segment boundaries are nudged to land on
    beats in output time — no beat detection involved. User-supplied music

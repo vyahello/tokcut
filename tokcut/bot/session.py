@@ -11,12 +11,15 @@ from dataclasses import dataclass, field
 
 from ..analysis import AUTO_SWEET
 from ..caption import DEFAULT_STYLE, STYLES
+from ..music import STYLE_BPM
 
 VALID_CAPTION_POS = ("auto", "top", "bottom")
 VALID_MUSIC = ("synthwave", "phonk", "off")
 MIN_TARGET, MAX_TARGET = 10.0, 120.0
 MIN_ZOOM, MAX_ZOOM = 0.5, 2.5
 ZOOM_STEP = 1.15  # one tap of Tighter/Wider
+MIN_BPM, MAX_BPM = 60, 180
+TEMPO_STEP = 1.12  # one tap of Faster/Slower beat
 
 
 @dataclass
@@ -30,6 +33,13 @@ class EditParams:
     look: bool = True  # finishing grade (contrast/saturation pop)
     keep_audio: bool = False
     music_style: str | None = None  # None = muted export
+    music_bpm: int | None = None    # None = the style's natural tempo
+    music_seed: int = 0             # bump to re-roll the composition
+
+
+def default_bpm(style: str | None) -> int:
+    """The natural tempo for a style (phonk 132, synthwave 84)."""
+    return STYLE_BPM.get(style or "synthwave", 84)
 
 
 @dataclass
@@ -47,12 +57,18 @@ class EditSession:
 
     def summary(self) -> str:
         p = self.params
-        music = p.music_style or "muted"
         target = "auto" if p.target is None else f"{p.target:.0f}s"
+        if p.keep_audio:
+            audio = "ambient"
+        elif p.music_style:
+            bpm = p.music_bpm or default_bpm(p.music_style)
+            audio = f"{p.music_style}@{bpm}bpm#{p.music_seed}"
+        else:
+            audio = "muted"
         return (f'caption="{self.caption}" target={target} '
                 f"style={p.style} caption_pos={p.caption_pos} "
                 f"hook={p.hook} crop={p.crop} zoom={p.zoom:.2f} "
-                f"audio={'ambient' if p.keep_audio else music}")
+                f"audio={audio}")
 
 
 def cleanup_files(session: EditSession) -> tuple[int, int]:
@@ -114,6 +130,13 @@ def validate_updates(raw: dict) -> dict:
     if isinstance(music, str) and music in VALID_MUSIC:
         out["music_style"] = None if music == "off" else music
 
+    bpm = raw.get("music_bpm")
+    if isinstance(bpm, (int, float)) and not isinstance(bpm, bool):
+        out["music_bpm"] = int(min(MAX_BPM, max(MIN_BPM, bpm)))
+
+    if raw.get("new_music_mix") is True:
+        out["new_music_mix"] = True
+
     return out
 
 
@@ -151,6 +174,15 @@ def apply_updates(session: EditSession, updates: dict) -> list[str]:
     if "music_style" in updates and updates["music_style"] != p.music_style:
         p.music_style = updates["music_style"]
         changes.append(f"music → {p.music_style or 'off'}")
+    if "music_bpm" in updates and updates["music_bpm"] != p.music_bpm:
+        faster = updates["music_bpm"] > (p.music_bpm or default_bpm(
+            p.music_style))
+        p.music_bpm = updates["music_bpm"]
+        changes.append(f"music tempo → {p.music_bpm} bpm "
+                       f"({'faster' if faster else 'slower'})")
+    if updates.get("new_music_mix"):
+        p.music_seed += 1
+        changes.append("music → fresh mix")
     return changes
 
 
@@ -179,6 +211,21 @@ def tweak_updates(key: str, params: EditParams) -> dict:
         return {"music": key}
     if key == "nomusic":
         return {"music": "off"}
+    if key in ("faster", "slower"):
+        # tempo only matters with music on — enable phonk if it's off so
+        # the tap is audible
+        style = params.music_style or "phonk"
+        base = params.music_bpm or default_bpm(style)
+        factor = TEMPO_STEP if key == "faster" else 1.0 / TEMPO_STEP
+        out: dict = {"music_bpm": round(base * factor)}
+        if params.music_style is None:
+            out["music"] = style
+        return out
+    if key == "remix":
+        out = {"new_music_mix": True}
+        if params.music_style is None:
+            out["music"] = "phonk"
+        return out
     if key == "style":
         order = list(STYLES)
         idx = order.index(params.style) if params.style in order else 0
@@ -201,4 +248,15 @@ def fallback_updates(feedback: str, params: EditParams) -> dict:
         return {"zoom": params.zoom / ZOOM_STEP}
     if any(w in low for w in ("tighter", "zoom in", "closer", "zoom")):
         return {"zoom": params.zoom * ZOOM_STEP}
+    if any(w in low for w in ("music", "beat", "track", "song", "tune")):
+        style = params.music_style or "phonk"
+        base = params.music_bpm or default_bpm(style)
+        enable = {"music": style} if params.music_style is None else {}
+        if any(w in low for w in ("fast", "quick", "hype", "energ")):
+            return {"music_bpm": round(base * TEMPO_STEP), **enable}
+        if any(w in low for w in ("slow", "chill", "calm")):
+            return {"music_bpm": round(base / TEMPO_STEP), **enable}
+        if any(w in low for w in ("different", "another", "new", "fresh",
+                                  "change", "remix")):
+            return {"new_music_mix": True, **enable}
     return {}

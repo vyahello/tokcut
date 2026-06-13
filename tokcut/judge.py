@@ -284,11 +284,18 @@ Available settings:
   (true/false; "too saturated"/"flat colors" feedback maps here)
 - keep_audio: keep the original ambient sound (default is muted)
 - music: "synthwave", "phonk", or "off" (baked-in generated music)
+- music_bpm: tempo of the backing track in BPM (60-180). Phonk sits
+  ~132, synthwave ~84; the current value is in the settings above. Raise
+  it for "faster/quicker/more hyped" music, lower it for "slower/chill".
+  Only set this for tempo feedback, not for video pacing (that's target)
+- new_music_mix: true when they want a different/fresh track in the same
+  style ("another beat", "different track", "remix it")
 
 Reply with ONLY a JSON object, null for anything that should not change:
 {{"caption": null, "regenerate_caption": false, "target": null,
  "caption_pos": null, "style": null, "hook": null, "crop": null,
  "zoom": null, "look": null, "keep_audio": null, "music": null,
+ "music_bpm": null, "new_music_mix": false,
  "reply": "<one short line telling the creator what you'll change>"}}
 
 Change only what the feedback implies — when in doubt, change less.

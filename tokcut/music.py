@@ -32,7 +32,9 @@ try:  # optional pro mastering chain — see module docstring
         Chorus,
         Compressor,
         Distortion,
+        Gain,
         HighpassFilter,
+        HighShelfFilter,
         Limiter,
         LowpassFilter,
         Pedalboard,
@@ -92,18 +94,33 @@ DRUM_HAT, DRUM_OHAT, DRUM_CRASH = 42, 46, 49
 Event = tuple[float, float, int, int, int]
 
 
+# bigger/better soundfonts sound far more realistic than the tiny 6 MB
+# default — prefer them when present (FluidR3 ~140 MB, GeneralUser ~30 MB)
+SF_PREFERENCE = ("fluidr3", "generaluser", "musescore", "timgm")
+
+
 def find_soundfont() -> str | None:
-    """Locate a General MIDI .sf2 (TOKCUT_SOUNDFONT wins)."""
+    """Locate a General MIDI .sf2, best-quality first (TOKCUT_SOUNDFONT
+    wins outright)."""
     env = os.environ.get("TOKCUT_SOUNDFONT", "")
     if env and os.path.exists(env):
         return env
+    hits: list[str] = []
     for pattern in ("/usr/share/sounds/sf2/*.sf2",
                     "/usr/share/soundfonts/*.sf2",
                     os.path.expanduser("~/.tokcut/*.sf2")):
-        hits = sorted(glob.glob(pattern))
-        if hits:
-            return hits[0]
-    return None
+        hits += glob.glob(pattern)
+    if not hits:
+        return None
+
+    def rank(path: str) -> tuple[int, str]:
+        name = os.path.basename(path).lower()
+        for i, key in enumerate(SF_PREFERENCE):
+            if key in name:
+                return i, name
+        return len(SF_PREFERENCE), name  # unknown fonts after known ones
+
+    return sorted(hits, key=rank)[0]
 
 
 def _note_hz(root: float, semi: float) -> float:
@@ -136,11 +153,31 @@ def _kick(n: int) -> np.ndarray:
 
 
 def _bass808(freq: float, n: int) -> np.ndarray:
-    """Booming sub with a pitch drop and tanh drive — the phonk 808."""
+    """Booming sub with a pitch drop and hard drive — the phonk 808.
+
+    The drive is deliberately aggressive: distorted 808s are the whole
+    point of phonk, and they cut through a phone speaker.
+    """
     t = np.arange(n) / SR
     sweep = freq * (1 + 2.2 * np.exp(-t * 35))
     phase = 2 * np.pi * np.cumsum(sweep) / SR
-    return np.tanh(2.5 * np.sin(phase)) * np.exp(-t * 4.0)
+    # blend a clipped sine (sub weight) with a harder tanh-driven copy
+    # (harmonics that survive small speakers)
+    sub = np.sin(phase)
+    return (0.5 * sub + 0.5 * np.tanh(4.0 * sub)) * np.exp(-t * 3.6)
+
+
+def _riser(n: int, rng: np.random.Generator) -> np.ndarray:
+    """A noise sweep that builds into the drop — classic TikTok energy.
+
+    White noise pushed through a rising high-pass with a volume crescendo,
+    so it whooshes up and resolves on the downbeat that follows.
+    """
+    noise = rng.standard_normal(n)
+    # progressively stronger one-zero high-pass = brightening sweep
+    sweep = np.cumsum(np.diff(noise, prepend=0.0)
+                      * np.linspace(0.2, 1.0, n))
+    return sweep * np.linspace(0.0, 1.0, n) ** 2.2
 
 
 def _hat(n: int, rng: np.random.Generator,
@@ -534,36 +571,46 @@ def _compose_osc(duration: float, bpm: int, style: str,
 # ----------------------------------------------------------------- master
 
 def _master(track: np.ndarray, style: str) -> np.ndarray:
-    """Master bus: pedalboard FX chain, or a gentle fallback."""
+    """Master bus: pedalboard FX chain, or a gentle fallback.
+
+    Tuned loud and bright — TikTok plays on phone speakers, so the mix is
+    pushed hard into the limiter (dense, "hyped") with a treble shelf for
+    air. TikTok re-normalizes loudness on upload, so the perceptual
+    density survives while the level is brought back in line.
+    """
     if HAS_PEDALBOARD:
         if style == "phonk":
             board = Pedalboard([
-                HighpassFilter(cutoff_frequency_hz=30),
-                Compressor(threshold_db=-16, ratio=3.0,
-                           attack_ms=5, release_ms=120),
-                Distortion(drive_db=4),          # tape-style grit
-                LowpassFilter(cutoff_frequency_hz=9000),
-                Reverb(room_size=0.18, wet_level=0.06, dry_level=0.94),
-                Limiter(threshold_db=-2.0, release_ms=120),
+                HighpassFilter(cutoff_frequency_hz=32),
+                Compressor(threshold_db=-18, ratio=3.5,
+                           attack_ms=4, release_ms=110),
+                Distortion(drive_db=7),          # aggressive tape grit
+                LowpassFilter(cutoff_frequency_hz=11000),
+                HighShelfFilter(cutoff_frequency_hz=6500, gain_db=3.5),
+                Reverb(room_size=0.16, wet_level=0.05, dry_level=0.95),
+                Gain(gain_db=4.0),               # push into the limiter
+                Limiter(threshold_db=-1.0, release_ms=90),
             ])
         else:
             board = Pedalboard([
                 HighpassFilter(cutoff_frequency_hz=28),
                 Chorus(rate_hz=0.7, depth=0.2, mix=0.3),
-                Reverb(room_size=0.45, wet_level=0.16, dry_level=0.88,
+                Reverb(room_size=0.42, wet_level=0.14, dry_level=0.9,
                        width=1.0),
-                Compressor(threshold_db=-14, ratio=2.5,
-                           attack_ms=8, release_ms=180),
-                Limiter(threshold_db=-2.0, release_ms=150),
+                Compressor(threshold_db=-16, ratio=3.0,
+                           attack_ms=6, release_ms=160),
+                HighShelfFilter(cutoff_frequency_hz=7000, gain_db=3.0),
+                Gain(gain_db=3.5),
+                Limiter(threshold_db=-1.0, release_ms=120),
             ])
         out = board(track.astype(np.float32), SR)
         return np.clip(np.asarray(out, dtype=np.float32), -1.0, 1.0)
-    # fallback: warm lowpass + soft clip, per channel
-    cutoff = 3800 if style == "phonk" else 2400
+    # fallback: warm lowpass + harder soft clip (denser without pedalboard)
+    cutoff = 4200 if style == "phonk" else 2600
     out = np.stack([_lowpass(track[:, c], cutoff) for c in (0, 1)],
                    axis=1)
     peak = float(np.max(np.abs(out))) or 1.0
-    return np.tanh(out / peak * 1.1).astype(np.float32)
+    return np.tanh(out / peak * 1.4).astype(np.float32)
 
 
 def generate(
@@ -585,13 +632,23 @@ def generate(
     else:
         bed, drums, kick_times = _compose_osc(duration, bpm, style, rng)
 
-    # the melodic bed pumps under the kicks — the genre's heartbeat
-    dip = 0.30 if style == "phonk" else 0.55
+    # the melodic bed pumps under the kicks — the genre's heartbeat.
+    # Deeper, snappier duck for phonk = more obvious "breathing" energy.
+    dip = 0.22 if style == "phonk" else 0.5
     env = _sidechain(n, kick_times, dip=dip,
-                     recover=min(0.30, (60.0 / bpm) * 0.6))
+                     recover=min(0.28, (60.0 / bpm) * 0.55))
     track = bed * env[:, None] + drums
+
+    # a riser sweeping into the first downbeat — instant TikTok energy
+    bar = (60.0 / bpm) * 4
+    riser_n = min(int(bar * SR), n)
+    if riser_n > SR // 2:
+        riser = _riser(riser_n, rng) * 0.22
+        track[:riser_n, 0] += riser
+        track[:riser_n, 1] += riser
+
     peak = float(np.max(np.abs(track))) or 1.0
-    track = (track / peak * 0.85).astype(np.float32)
+    track = (track / peak * 0.9).astype(np.float32)
     return _master(track, style)
 
 
